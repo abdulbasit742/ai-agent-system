@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "suppressions": [
+    {
+      "id": "reviewed-test-fixture",
+      "rule_id": "BAS003",
+      "path": "tests/fixtures/**",
+      "owner": "security-team",
+      "reason": "Synthetic provider token used only by an isolated scanner fixture.",
+      "expires": "2099-12-31"
+    }
+  ]
+}
