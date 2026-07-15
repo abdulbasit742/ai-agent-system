@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-15",
+  "integrations": [
+    {"name": "agent-boundary-guard", "path": "integrations/agent-boundary-guard", "url": "https://github.com/abdulbasit742/agent-boundary-guard.git", "commit": "410e3515748422cf0809d2c6a5a355729d3d2528", "license": "MIT"},
+    {"name": "mcp-policy-guard", "path": "integrations/mcp-policy-guard", "url": "https://github.com/abdulbasit742/mcp-policy-guard.git", "commit": "fd317d4b6535a395e163c5a62dec493ec3ac7965", "license": "MIT"},
+    {"name": "promptleak-scrubber", "path": "integrations/promptleak-scrubber", "url": "https://github.com/abdulbasit742/promptleak-scrubber.git", "commit": "caeb7849ebf5c4448726513795c3566e72adcfb7", "license": "repository license applies"},
+    {"name": "repo-risk-radar", "path": "integrations/repo-risk-radar", "url": "https://github.com/abdulbasit742/repo-risk-radar.git", "commit": "56d34eb3432dfb8892fb24a3d158c8f6728fe09d", "license": "repository license applies"},
+    {"name": "workflow-warden", "path": "integrations/workflow-warden", "url": "https://github.com/abdulbasit742/workflow-warden.git", "commit": "e2b5358f2b2fa6f2759948e104dc5c47d596d0c2", "license": "repository license applies"},
+    {"name": "social-autopilot", "path": "integrations/social-autopilot", "url": "https://github.com/abdulbasit742/social-autopilot.git", "commit": "39cf35e24eedb634e09cf0fde742f79de886e5e2", "license": "MIT"},
+    {"name": "awesome-llm-apps", "path": "catalog/awesome-llm-apps", "url": "https://github.com/Shubhamsaboo/awesome-llm-apps.git", "commit": "6ce858fdce51087a231b07ca423be39020b964ad", "license": "Apache-2.0"},
+    {"name": "engineering-skills", "path": "catalog/engineering-skills", "url": "https://github.com/mattpocock/skills.git", "commit": "e9fcdf95b402d360f90f1db8d776d5dd450f9234", "license": "MIT"}
+  ],
+  "excluded": [
+    {"name": "destructive-command-guard", "reason": "Excluded because its current license contains an OpenAI/Anthropic rider. No code is copied, fetched, or vendored by this system."}
+  ]
+}
