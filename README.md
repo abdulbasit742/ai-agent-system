@@ -1,6 +1,6 @@
 # Basit Agent System
 
-A dependency-free AI-agent control plane for repository scanning, command guarding, trace redaction, safe integration dispatch, strict tamper-evident audit logs, and offline software-supply-chain verification.
+A dependency-free AI-agent control plane for repository scanning, command guarding, trace redaction, safe integration dispatch, strict tamper-evident audit logs, typed privacy-safe events, and offline software-supply-chain verification.
 
 ## Capabilities
 
@@ -11,6 +11,7 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - first-party GitHub Action with annotations, summaries, JSON, SARIF, and structured outputs
 - installable dependency-free Python package with reviewed wheel contents
 - strict canonical audit chains with external freshness pins and safe recovery copies
+- versioned typed audit events with privacy-preserving path, command, and Git-ref references
 - reproducible release bundles with exact source identity and SHA-256 checksums
 - deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
 - consumer release-admission policies and verified release-transition rollback gates
@@ -27,6 +28,7 @@ python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard git reset --hard HEAD~3
 python agent_system.py scrub trace.log --output sanitized/trace.log
 python agent_system.py audit --format json
+python agent_system.py audit-events --format json
 python agent_system.py doctor
 ```
 
@@ -57,10 +59,11 @@ basit-agent --version
 basit-agent scan . --format json --fail-on high
 basit-agent guard git reset --hard HEAD~1
 basit-agent audit --format json
+basit-agent audit-events --format json
 basit-agent-lines . --changed-from origin/main --format sarif
 ```
 
-Compatibility aliases `agent-system` and `agent-changed-lines` are also installed. The wheel has no runtime dependencies and contains only the ten reviewed modules enforced by `scripts/validate_wheel.py`. Audit runtime code is included, but audit data, lock files, reports, baselines, tests, integrations, and generated evidence never enter the wheel.
+Compatibility aliases `agent-system` and `agent-changed-lines` are also installed. The wheel has no runtime dependencies and contains only the eleven reviewed modules enforced by `scripts/validate_wheel.py`. Audit runtime code is included, but audit data, lock files, reports, baselines, tests, integrations, and generated evidence never enter the wheel.
 
 External integrations are not vendored. Installed-wheel calls to `doctor` or integration `run` fail closed and require a source checkout.
 
@@ -107,6 +110,37 @@ Every append holds a persistent sidecar advisory lock and verifies the complete 
 A self-consistent file alone does not prove freshness. Retain the latest record count and head hash separately. Recovery never edits or truncates the source log.
 
 See [docs/audit-log-integrity.md](docs/audit-log-integrity.md) and [docs/security-audit-log-integrity.md](docs/security-audit-log-integrity.md).
+
+## Typed privacy-safe audit events
+
+Hash integrity proves that stored bytes did not change. Typed event admission additionally proves that newly stored details matched a reviewed schema and privacy boundary.
+
+Inspect the stable event catalog:
+
+```bash
+python agent_system.py audit-events --format json
+```
+
+Reserved event names—`scan`, `scan-added-lines`, `baseline-create`, `guard`, `scrub`, and `dispatch`—use exact field schemas. Other lowercase hyphenated events use a bounded generic JSON schema. Credential-bearing generic keys and credential-shaped free-form values are rejected.
+
+New records contain `_event_schema: 1`. Paths become `{kind, sha256}` references, command arrays become `{argc, sha256}` references, and Git refs become domain-separated SHA-256 references. Raw values are not stored alongside those references.
+
+Audit reports now include typed/untyped counts, coverage percentage, privacy state, event counts, and the event-schema version. Existing pre-schema history remains verifiable but is reported as untyped.
+
+After retaining a migration checkpoint, require complete typed coverage:
+
+```bash
+python agent_system.py audit \
+  --path .agent-system/audit.jsonl \
+  --require-typed \
+  --expected-records "$EXPECTED_RECORDS" \
+  --expected-head "$EXPECTED_HEAD" \
+  --format json
+```
+
+Stable event-admission rules are `AUD022` for typed schema/canonicalization failure, `AUD023` for credential-bearing details, and `AUD024` when typed-only policy encounters earlier untyped records.
+
+See [docs/audit-event-admission.md](docs/audit-event-admission.md) and [docs/security-audit-event-admission.md](docs/security-audit-event-admission.md).
 
 ## Pull-request change gates
 
@@ -256,11 +290,13 @@ The root dispatcher does not publish by default.
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+python -m compileall -q agent_audit.py agent_audit_events.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
+python agent_system.py audit-events --format json
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py audit --format json
+python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
 python agent_system.py guard python -m unittest discover -s tests
 ```
 
