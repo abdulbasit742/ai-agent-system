@@ -1,33 +1,32 @@
 {
-  "version": 3,
-  "sequence": {"start": 1, "end": 400, "latest_completed": 35, "next_expected": 36},
-  "history": [
-    {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"},
-    {"start": 23, "end": 34, "repository_commit": "6e8825453eb30065219add00d9427d9472ab3a03", "path": "development-progress.json", "content_sha": "7473cdecbba3af9b173f67b29bfeceb5506ab352"}
-  ],
+  "version": 4,
+  "sequence": {
+    "start": 1,
+    "end": 400,
+    "latest_completed": 36,
+    "next_expected": 37
+  },
+  "prior_history": {
+    "start": 1,
+    "end": 35,
+    "repository_commit": "b478d8750e2d884fff4095ed2ff9cd98a55047cf",
+    "path": "development-progress.json"
+  },
   "completed": [
     {
-      "number": 35,
-      "title": "Portable audit trust receiver acceptance checkpoint bundles",
+      "number": 36,
+      "title": "Consumer receiver-acceptance bundle admission",
       "status": "completed",
-      "summary": "Added immutable exact-boundary snapshot and transition bundles for pinned receiver-acceptance checkpoints, mandatory candidate-head inclusion proofs, acceptance consistency binding, checksums, external pins, and offline verification without complete acceptance states or loose evidence.",
+      "summary": "Consumer-owned policies verify receiver-acceptance checkpoint bundles before applying acceptance, receiver, trust, proof-selection, and transition controls.",
       "verification": {
-        "unit_tests": 645,
+        "unit_tests": 665,
         "python_versions": ["3.11", "3.12"],
-        "compileall": "passed",
-        "isolated_acceptance_bundle_adapter": "passed",
-        "snapshot_and_transition_acceptance_bundles": "passed",
-        "mandatory_candidate_head_proof": "passed",
-        "offline_verification_without_loose_evidence": "passed",
-        "native_acceptance_evidence_serialization": "passed",
-        "exact_file_and_checksum_boundary": "passed",
-        "external_bundle_and_checkpoint_pins": "passed",
-        "proof_checkpoint_and_consistency_substitution_rejection": "passed",
-        "symlink_and_overwrite_rejection": "passed",
-        "installed_acceptance_bundle_cli": "passed",
-        "read_only_acceptance_bundle_ci": "passed",
-        "thirty_two_module_dependency_free_wheel": "passed",
-        "forty_four_installed_commands": "passed",
+        "snapshot_and_transition_admission": "passed",
+        "canonical_policy_and_decision_ids": "passed",
+        "policy_and_manifest_boundary_controls": "passed",
+        "installed_aliases": "passed",
+        "dependency_free_modules": 33,
+        "installed_commands": 46,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
