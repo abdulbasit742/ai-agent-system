@@ -40,6 +40,7 @@ agent-changed-lines = "agent_cli:changed_lines_main"
 include-package-data = false
 py-modules = [
   "agent_audit",
+  "agent_audit_events",
   "agent_baseline",
   "agent_changed_lines",
   "agent_cli",

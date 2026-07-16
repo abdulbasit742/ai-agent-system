@@ -1,0 +1,129 @@
+name: audit-event-admission
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  event-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test typed audit event admission
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_event_admission.py" -v \
+            > "$RUNNER_TEMP/event-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 120 "$RUNNER_TEMP/event-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/event-tests.log"
+      - name: Re-run structural audit regressions through the typed gateway
+        run: |
+          python -m unittest discover -s tests -p "test_agent_audit.py" -v \
+            > "$RUNNER_TEMP/structural-audit-tests.log" 2>&1
+          cat "$RUNNER_TEMP/structural-audit-tests.log"
+      - name: Test added-line audit event compatibility
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_added_line_gate.py" -v \
+            > "$RUNNER_TEMP/added-line-event-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 120 "$RUNNER_TEMP/added-line-event-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/added-line-event-tests.log"
+      - name: Preserve event test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-event-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/event-tests.log
+            ${{ runner.temp }}/structural-audit-tests.log
+            ${{ runner.temp }}/added-line-event-tests.log
+          if-no-files-found: warn
+      - name: Compile typed audit runtime
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_system.py agent_system_legacy.py tests/test_agent_audit.py tests/test_audit_event_admission.py tests/test_added_line_gate.py
+
+  event-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Inspect the event catalog
+        run: python agent_system.py audit-events --format json > "$RUNNER_TEMP/audit-events.json"
+      - name: Create privacy-safe typed records
+        run: |
+          set +e
+          {
+            AUDIT="$RUNNER_TEMP/typed-audit.jsonl"
+            python agent_system.py --audit-log "$AUDIT" scan . \
+              --format json --fail-on high --output "$RUNNER_TEMP/scan.json"
+            python agent_system.py --audit-log "$AUDIT" guard python -m unittest \
+              > "$RUNNER_TEMP/guard.json"
+            python agent_system.py audit --path "$AUDIT" --require-typed --format json \
+              > "$RUNNER_TEMP/typed-report.json"
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          report = json.loads((root / 'typed-report.json').read_text())
+          raw = (root / 'typed-audit.jsonl').read_text()
+          assert report['valid'] is True
+          assert report['typed_records'] == report['records'] == 2
+          assert report['untyped_records'] == 0
+          assert report['typed_coverage_percent'] == 100
+          assert report['privacy_safe'] is True
+          assert report['event_counts'] == {'guard': 1, 'scan': 1}
+          assert str(Path.cwd()) not in raw
+          PY
+          } > "$RUNNER_TEMP/event-integration.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 120 "$RUNNER_TEMP/event-integration.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/event-integration.log"
+      - name: Reject credential-shaped generic details before append
+        run: |
+          python - <<'PY'
+          from agent_audit_events import AuditEventError, prepare_event
+
+          field = 'api' + '_key'
+          try:
+              prepare_event('custom-event', {field: 'opaque'})
+          except AuditEventError as exc:
+              assert exc.rule_id == 'AUD023'
+          else:
+              raise AssertionError('credential-bearing field was admitted')
+          PY
+      - name: Preserve typed audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-events-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/audit-events.json
+            ${{ runner.temp }}/typed-audit.jsonl
+            ${{ runner.temp }}/typed-report.json
+            ${{ runner.temp }}/event-integration.log
+          if-no-files-found: warn

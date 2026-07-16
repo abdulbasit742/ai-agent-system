@@ -15,14 +15,29 @@ from agent_audit import (
     append_audit as _strict_append_audit,
     inspect_audit as _strict_inspect_audit,
     recover_audit,
-    verify_audit as _strict_verify_audit,
+)
+from agent_audit_events import (
+    AuditEventError,
+    event_catalog,
+    inspect_event_records,
+    prepare_event,
 )
 from agent_system_legacy import *  # noqa: F401,F403
 
 
-def inspect_audit(*args, **kwargs):
-    """Expose stable public AUD rules while preserving strict core validation."""
-    report = _strict_inspect_audit(*args, **kwargs)
+def inspect_audit(
+    path: Path,
+    *,
+    expected_head: str | None = None,
+    expected_records: int | None = None,
+    require_typed: bool = False,
+) -> dict[str, Any]:
+    """Validate structural integrity, event admission, and optional typed coverage."""
+    report = _strict_inspect_audit(
+        path,
+        expected_head=expected_head,
+        expected_records=expected_records,
+    )
     error = report.get("error")
     if (
         error
@@ -31,16 +46,45 @@ def inspect_audit(*args, **kwargs):
     ):
         report = dict(report)
         report["error"] = {**error, "rule_id": "AUD013"}
-    return report
+    return inspect_event_records(Path(path), report, require_typed=require_typed)
 
 
-# Keep the public and internal compatibility API while replacing only audit handling.
-append_audit = _strict_append_audit
-verify_audit = _strict_verify_audit
+def append_audit(
+    path: Path,
+    event: str,
+    details: dict[str, Any],
+    *,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Admit, privacy-normalize, and append one typed audit event."""
+    try:
+        normalized_event, normalized_details = prepare_event(event, details)
+    except AuditEventError as exc:
+        raise AuditError(f"{exc.rule_id}: audit event admission failed: {exc}") from exc
+    return _strict_append_audit(
+        path,
+        normalized_event,
+        normalized_details,
+        timestamp=timestamp,
+    )
+
+
+def verify_audit(path: Path) -> tuple[bool, int]:
+    """Compatibility verifier using both structural and event-level validation."""
+    report = inspect_audit(path)
+    if report["valid"]:
+        return True, report["records"]
+    line = report["error"]["line"] if report.get("error") else None
+    return False, line or report["records"]
+
+
+# Keep public and internal compatibility APIs while replacing audit admission.
 _load_controls = _legacy._load_controls
 _baseline_for_scope = _legacy._baseline_for_scope
 _scope_summary = _legacy._scope_summary
+_audit.append_audit = append_audit
 _audit.inspect_audit = inspect_audit
+_audit.verify_audit = verify_audit
 _legacy.append_audit = append_audit
 _legacy.verify_audit = verify_audit
 
@@ -78,7 +122,14 @@ def _audit_text(report: dict[str, Any]) -> str:
         f"{state} {report['records']} record(s)",
         f"head: {report['head_hash']}",
         f"records: legacy={report['legacy_records']} versioned={report['versioned_records']}",
+        f"events: typed={report['typed_records']} untyped={report['untyped_records']} "
+        f"coverage={report['typed_coverage_percent']}% privacy_safe={str(report['privacy_safe']).lower()}",
     ]
+    if report.get("event_counts"):
+        lines.append(
+            "event-counts: "
+            + ", ".join(f"{name}={count}" for name, count in report["event_counts"].items())
+        )
     error = report.get("error")
     if error:
         location = ""
@@ -108,6 +159,7 @@ def _audit_main(command_arguments: list[str], default_path: Path) -> int:
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--expected-head")
     parser.add_argument("--expected-records", type=int)
+    parser.add_argument("--require-typed", action="store_true")
     parser.add_argument("--recover-to", type=Path)
     args = parser.parse_args(command_arguments)
     path = args.path or default_path
@@ -116,6 +168,7 @@ def _audit_main(command_arguments: list[str], default_path: Path) -> int:
             path,
             expected_head=args.expected_head,
             expected_records=args.expected_records,
+            require_typed=args.require_typed,
         )
         if args.recover_to is not None:
             report = dict(report)
@@ -130,6 +183,21 @@ def _audit_main(command_arguments: list[str], default_path: Path) -> int:
     return 0 if report["valid"] else 1
 
 
+def _audit_events_main(command_arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="agent-system audit-events")
+    parser.add_argument("--format", choices=("text", "json"), default="text")
+    args = parser.parse_args(command_arguments)
+    catalog = event_catalog()
+    if args.format == "json":
+        print(json.dumps(catalog, sort_keys=True, indent=2))
+    else:
+        print(f"Audit event schema v{catalog['event_schema_version']}")
+        print("Known events: " + ", ".join(catalog["known_events"]))
+        print("Generic events: bounded safe JSON; credential-bearing material rejected")
+        print("Paths, commands, and Git refs are stored as domain-separated SHA-256 references")
+    return 0
+
+
 def _preflight_required(command: str | None, command_arguments: list[str]) -> bool:
     if command in _AUDITED_COMMANDS:
         return True
@@ -142,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
         command, command_arguments, audit_path = _command_context(arguments)
         if command == "audit":
             return _audit_main(command_arguments, audit_path)
+        if command == "audit-events":
+            return _audit_events_main(command_arguments)
         if _preflight_required(command, command_arguments):
             report = inspect_audit(audit_path)
             if not report["valid"]:

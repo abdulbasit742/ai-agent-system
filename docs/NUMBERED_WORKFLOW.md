@@ -9,7 +9,7 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 3. Preserve all working features and repository safety boundaries.
 4. Implement one coherent vertical slice rather than disconnected files.
 5. Add or update regression tests and documentation.
-6. Run unit tests, compilation, configuration validation, policy validation, baseline validation, Git scope validation, action validation, package validation, audit-integrity validation, release-evidence validation, supply-chain evidence validation, release-admission validation, release-transition validation, release-trust-state validation, release-checkpoint validation, release-consistency validation, self-scan, and command-guard checks.
+6. Run unit tests, compilation, configuration validation, policy validation, baseline validation, Git scope validation, action validation, package validation, audit-integrity and typed-event-admission validation, release-evidence validation, supply-chain evidence validation, release-admission validation, release-transition validation, release-trust-state validation, release-checkpoint validation, release-consistency validation, self-scan, and command-guard checks.
 7. Commit only after verification succeeds.
 8. Update `development-progress.json` with the completed number, outcome, files, and verification evidence.
 9. Continue sequentially; do not skip or silently redo a number.
@@ -30,3 +30,4 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 - Task 12 introduced canonical unsigned Merkle checkpoints, portable release inclusion proofs, externally pinned checkpoint IDs, immutable proof artifacts, and stable rollback/fork lineage diagnostics.
 - Task 13 introduced compact append-only Merkle consistency proofs that verify retained-to-candidate checkpoint continuity with canonical `O(log n)` hash frontiers, proof-only verification, and stable rollback/fork denials.
 - Task 14 introduced strict canonical audit-log records, complete-chain append preflight, stable `AUDxxx` diagnostics, external freshness pins, immutable verified-prefix recovery copies, and corrupt-log command blocking.
+- Task 15 introduced versioned typed audit-event admission, exact reserved-event schemas, bounded generic events, privacy-preserving path/command/Git-ref digests, typed coverage enforcement, and stable `AUD022`–`AUD024` diagnostics.

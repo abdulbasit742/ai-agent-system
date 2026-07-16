@@ -14,6 +14,7 @@
     "max_size_bytes": 1048576,
     "modules": [
       "agent_audit.py",
+      "agent_audit_events.py",
       "agent_baseline.py",
       "agent_changed_lines.py",
       "agent_cli.py",
