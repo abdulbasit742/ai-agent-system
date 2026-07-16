@@ -1,0 +1,137 @@
+name: audit-integrity
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  audit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test strict audit log controls
+        run: python -m unittest discover -s tests -p "test_agent_audit.py" -v
+      - name: Compile audit runtime
+        run: python -m compileall -q agent_audit.py agent_system.py agent_system_legacy.py tests/test_agent_audit.py
+
+  audit-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create a strict versioned audit chain
+        run: |
+          AUDIT="$RUNNER_TEMP/audit.jsonl"
+          python agent_system.py --audit-log "$AUDIT" scan . \
+            --format json --fail-on high --output "$RUNNER_TEMP/scan.json"
+          python agent_system.py --audit-log "$AUDIT" guard python -m unittest \
+            > "$RUNNER_TEMP/guard.json"
+          python agent_system.py --audit-log "$AUDIT" audit --format json \
+            > "$RUNNER_TEMP/audit-valid.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          report = json.loads((root / 'audit-valid.json').read_text())
+          assert report['valid'] is True
+          assert report['records'] == 2
+          assert report['legacy_records'] == 0
+          assert report['versioned_records'] == 2
+          assert len(report['head_hash']) == 64
+          PY
+      - name: Verify external head and count pins
+        run: |
+          python - <<'PY' > "$RUNNER_TEMP/audit-pins.env"
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'audit-valid.json').read_text())
+          print(f"HEAD_HASH={report['head_hash']}")
+          print(f"RECORDS={report['records']}")
+          PY
+          source "$RUNNER_TEMP/audit-pins.env"
+          python agent_system.py audit \
+            --path "$RUNNER_TEMP/audit.jsonl" \
+            --format json \
+            --expected-head "$HEAD_HASH" \
+            --expected-records "$RECORDS" \
+            > "$RUNNER_TEMP/audit-pinned.json"
+      - name: Recover only the verified prefix from a partial write
+        run: |
+          cp "$RUNNER_TEMP/audit.jsonl" "$RUNNER_TEMP/audit-corrupt.jsonl"
+          printf '{"partial"' >> "$RUNNER_TEMP/audit-corrupt.jsonl"
+          set +e
+          python agent_system.py audit \
+            --path "$RUNNER_TEMP/audit-corrupt.jsonl" \
+            --format json \
+            --recover-to "$RUNNER_TEMP/audit-recovered.jsonl" \
+            > "$RUNNER_TEMP/audit-invalid.json"
+          STATUS=$?
+          set -e
+          test "$STATUS" -eq 1
+          source "$RUNNER_TEMP/audit-pins.env"
+          python agent_system.py audit \
+            --path "$RUNNER_TEMP/audit-recovered.jsonl" \
+            --format json \
+            --expected-head "$HEAD_HASH" \
+            --expected-records "$RECORDS" \
+            > "$RUNNER_TEMP/audit-recovered-valid.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          invalid = json.loads((root / 'audit-invalid.json').read_text())
+          recovered = json.loads((root / 'audit-recovered-valid.json').read_text())
+          assert invalid['valid'] is False
+          assert invalid['error']['rule_id'] == 'AUD003'
+          assert invalid['recovery']['records'] == 2
+          assert recovered['valid'] is True
+          PY
+      - name: Reject stale pins and block audited commands on corruption
+        run: |
+          set +e
+          python agent_system.py audit \
+            --path "$RUNNER_TEMP/audit-recovered.jsonl" \
+            --expected-records 3 \
+            --format json \
+            > "$RUNNER_TEMP/audit-stale-pin.json"
+          PIN_STATUS=$?
+          python agent_system.py \
+            --audit-log "$RUNNER_TEMP/audit-corrupt.jsonl" \
+            guard python -m unittest \
+            > "$RUNNER_TEMP/preflight.out" \
+            2> "$RUNNER_TEMP/preflight.err"
+          PREFLIGHT_STATUS=$?
+          set -e
+          test "$PIN_STATUS" -eq 1
+          test "$PREFLIGHT_STATUS" -eq 2
+          test ! -s "$RUNNER_TEMP/preflight.out"
+          grep -q 'AUD003' "$RUNNER_TEMP/preflight.err"
+      - name: Preserve audit integrity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/audit-valid.json
+            ${{ runner.temp }}/audit-pinned.json
+            ${{ runner.temp }}/audit-invalid.json
+            ${{ runner.temp }}/audit-recovered-valid.json
+            ${{ runner.temp }}/audit-stale-pin.json
+            ${{ runner.temp }}/audit-recovered.jsonl
+            ${{ runner.temp }}/preflight.err
+          if-no-files-found: error
