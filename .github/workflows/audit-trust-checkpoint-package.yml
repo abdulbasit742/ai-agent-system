@@ -1,0 +1,119 @@
+name: audit-trust-checkpoint-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checkpoint-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise checkpoint aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/checkpoint-venv"
+          BIN="$RUNNER_TEMP/checkpoint-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-trust-checkpoint"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          from agent_audit_trust import _atomic_write, create_state
+          root = Path.cwd().parent
+          verified = {
+              "valid": True,
+              "bundle_id": "1" * 64,
+              "bundle_type": "snapshot",
+              "candidate": {
+                  "checkpoint_id": "2" * 64,
+                  "catalog_id": "3" * 64,
+                  "generation": 1,
+                  "segment_count": 1,
+                  "merkle_root": "4" * 64,
+              },
+              "previous": None,
+              "consistency": None,
+              "proof_count": 1,
+              "segment_count": 0,
+              "proof_ids": ["5" * 64],
+              "segment_ids": ["6" * 64],
+              "files": 4,
+              "bytes": 1000,
+          }
+          report = {
+              "admitted": True,
+              "policy_sha256": "7" * 64,
+              "decision_id": "8" * 64,
+              "identity": {
+                  "bundle_id": verified["bundle_id"],
+                  "bundle_type": "snapshot",
+                  "candidate_checkpoint_id": verified["candidate"]["checkpoint_id"],
+                  "candidate_catalog_id": verified["candidate"]["catalog_id"],
+                  "previous_checkpoint_id": None,
+                  "previous_catalog_id": None,
+              },
+              "evidence": {
+                  "files": 4,
+                  "bytes": 1000,
+                  "proof_count": 1,
+                  "sealed_segment_count": 0,
+                  "selected_segment_indexes": [1],
+                  "selected_segment_ids": ["6" * 64],
+                  "sealed_segment_indexes": [],
+                  "candidate_generation": 1,
+                  "candidate_segment_count": 1,
+                  "generation_delta": None,
+              },
+              "violations": [],
+          }
+          state = create_state(report, verified)
+          _atomic_write(root / "state.json", state, require_absent=True)
+          (root / "state-id.txt").write_text(state["state_id"] + "\n")
+          PY
+          STATE_ID=$(cat "$ROOT/state-id.txt")
+          "$BIN/basit-agent-audit-trust-checkpoint" create \
+            "$ROOT/state.json" "$ROOT/checkpoint.json" \
+            --expected-state-id "$STATE_ID" --format json \
+            > "$ROOT/create.json"
+          CHECKPOINT_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/create.json")
+          "$BIN/agent-audit-trust-checkpoint" verify "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --state "$ROOT/state.json" --expected-state-id "$STATE_ID" \
+            --format json > "$ROOT/verify.json"
+          "$BIN/basit-agent-audit-trust-checkpoint" prove \
+            "$ROOT/state.json" "$ROOT/checkpoint.json" "$ROOT/proof.json" \
+            --expected-state-id "$STATE_ID" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --sequence 1 --format json > "$ROOT/prove.json"
+          rm "$ROOT/state.json"
+          "$BIN/agent-audit-trust-checkpoint" verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/proof-only.json"
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.cwd().parent
+          created = json.loads((root / "create.json").read_text())
+          verified = json.loads((root / "verify.json").read_text())
+          proof = json.loads((root / "proof-only.json").read_text())
+          assert len(created["checkpoint_id"]) == 64
+          assert verified["valid"] is True
+          assert proof["valid"] is True
+          assert proof["bundle_verified"] is False
+          PY

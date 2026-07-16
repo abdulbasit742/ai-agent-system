@@ -17,6 +17,7 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - portable snapshot and transition audit evidence bundles
 - consumer-owned audit bundle admission policies
 - pinned, hash-chained audit bundle trust states
+- portable audit trust-state Merkle checkpoints, per-bundle proofs, and lineage gates
 - reproducible release bundles with deterministic SPDX SBOM and in-toto/SLSA-style provenance
 - release admission, transition, trust-state, checkpoint, and consistency controls
 - destructive-command policy gate and dry-run-first integration dispatcher
@@ -79,6 +80,8 @@ basit-agent-audit-admission evaluate audit-handoff \
 basit-agent-audit-trust verify audit-trust-state.json \
   --expected-state-id "$STATE_ID" \
   --bundle current-head-bundle
+basit-agent-audit-trust-checkpoint verify audit-trust-checkpoint.json \
+  --expected-checkpoint-id "$TRUST_CHECKPOINT_ID"
 ```
 
 Compatibility aliases are:
@@ -92,8 +95,9 @@ Compatibility aliases are:
 - `agent-audit-bundle`
 - `agent-audit-admission`
 - `agent-audit-trust`
+- `agent-audit-trust-checkpoint`
 
-The wheel has no runtime dependencies and contains only the eighteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, decisions, trust states, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
+The wheel has no runtime dependencies and contains only the nineteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, decisions, trust states, trust checkpoints/proofs, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
 
 Installed-wheel `doctor` and integration `run` fail closed because external integrations remain source-checkout-only.
 
@@ -284,6 +288,31 @@ Each entry binds bundle/checkpoint/catalog identity, generation, segment count, 
 Exit codes are `0` created/verified/advanced, `1` verified evidence denied or rejected as replay/head mismatch, and `2` malformed, unsafe, stale-pinned, or unverifiable input. Stable diagnostics are `ATS001`–`ATS010`.
 
 See [docs/audit-bundle-trust-state.md](docs/audit-bundle-trust-state.md) and [docs/security-audit-bundle-trust-state.md](docs/security-audit-bundle-trust-state.md).
+
+## Portable audit trust checkpoints
+
+A trust checkpoint commits one exact pinned trust-state generation to an RFC 6962-style Merkle root. A compact inclusion proof authenticates one admitted bundle entry without distributing the complete state.
+
+```bash
+basit-agent-audit-trust-checkpoint create \
+  audit-trust-state.json audit-trust-checkpoint.json \
+  --expected-state-id "$STATE_ID"
+
+basit-agent-audit-trust-checkpoint prove \
+  audit-trust-state.json audit-trust-checkpoint.json bundle-proof.json \
+  --expected-state-id "$STATE_ID" \
+  --expected-checkpoint-id "$TRUST_CHECKPOINT_ID" \
+  --bundle-id "$BUNDLE_ID"
+
+agent-audit-trust-checkpoint verify-proof \
+  bundle-proof.json audit-trust-checkpoint.json \
+  --expected-checkpoint-id "$TRUST_CHECKPOINT_ID" \
+  --bundle admitted-bundle
+```
+
+The state may be omitted during proof verification. Supplying `--bundle` fully re-verifies the portable snapshot or transition bundle and binds it to the authenticated trust entry. Lineage accepts only identical or right-descendant states; `ATC010` is rollback and `ATC011` is fork. These artifacts are unsigned and require externally retained state/checkpoint IDs for freshness.
+
+See [docs/audit-trust-checkpoints.md](docs/audit-trust-checkpoints.md) and [docs/security-audit-trust-checkpoints.md](docs/security-audit-trust-checkpoints.md).
 
 ## Pull-request change gates
 

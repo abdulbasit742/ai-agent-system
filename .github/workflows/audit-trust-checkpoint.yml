@@ -1,0 +1,264 @@
+name: audit-trust-checkpoint
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checkpoint-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test audit trust checkpoints and proofs
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_trust_checkpoint.py" -v \
+            > "$RUNNER_TEMP/audit-trust-checkpoint-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 260 "$RUNNER_TEMP/audit-trust-checkpoint-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-trust-checkpoint-tests.log"
+      - name: Re-run trust and bundle regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_bundle_trust.py" -v
+          python -m unittest discover -s tests -p "test_audit_bundle_admission.py" -v
+          python -m unittest discover -s tests -p "test_audit_evidence_bundle.py" -v
+      - name: Compile checkpoint runtime
+        run: python -m compileall -q agent_audit_trust_checkpoint.py agent_audit_trust.py agent_audit_bundle.py tests/test_audit_trust_checkpoint.py
+      - name: Preserve checkpoint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-checkpoint-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-checkpoint-tests.log
+          if-no-files-found: warn
+
+  checkpoint-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create, prove, bind, and gate audit trust checkpoints
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-checkpoint"
+          mkdir -p "$ROOT"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit import ZERO_HASH
+          from agent_audit_bundle import _canonical_bytes, create_bundle, verify_bundle
+          from agent_audit_catalog import _build_catalog
+          from agent_audit_checkpoint import create_checkpoint, create_proof
+          from agent_audit_consistency import create_consistency_proof
+          from agent_audit_trust import _atomic_write, append_transition, create_state
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "audit-trust-checkpoint"
+          def item(index, previous, salt=0):
+              return {
+                  "segment_index": index,
+                  "directory": f"segment-{index:04d}",
+                  "segment_id": f"{index + salt:064x}",
+                  "previous_segment_id": previous,
+                  "manifest_sha256": f"{index + 100 + salt:064x}",
+                  "segment_sha256": f"{index + 200 + salt:064x}",
+                  "head_hash": f"{index + 300 + salt:064x}",
+                  "records": index,
+                  "bytes": index * 100,
+              }
+          def report(verified, decision):
+              candidate = verified["candidate"]
+              previous = verified.get("previous")
+              return {
+                  "admitted": True,
+                  "policy_sha256": f"{7000 + decision:064x}",
+                  "decision_id": f"{8000 + decision:064x}",
+                  "identity": {
+                      "bundle_id": verified["bundle_id"],
+                      "bundle_type": verified["bundle_type"],
+                      "candidate_checkpoint_id": candidate["checkpoint_id"],
+                      "candidate_catalog_id": candidate["catalog_id"],
+                      "previous_checkpoint_id": previous["checkpoint_id"] if previous else None,
+                      "previous_catalog_id": previous["catalog_id"] if previous else None,
+                  },
+                  "evidence": {
+                      "files": verified["files"],
+                      "bytes": verified["bytes"],
+                      "proof_count": verified["proof_count"],
+                      "sealed_segment_count": verified["segment_count"],
+                      "selected_segment_indexes": [candidate["segment_count"]],
+                      "selected_segment_ids": verified["segment_ids"],
+                      "sealed_segment_indexes": [],
+                      "candidate_generation": candidate["generation"],
+                      "candidate_segment_count": candidate["segment_count"],
+                      "generation_delta": (
+                          candidate["generation"] - previous["generation"] if previous else None
+                      ),
+                  },
+                  "violations": [],
+              }
+          first = item(1, ZERO_HASH)
+          previous_catalog = _build_catalog([first], generation=1, previous_catalog_id=ZERO_HASH)
+          second = item(2, first["segment_id"])
+          candidate_catalog = _build_catalog(
+              [first, second], generation=2, previous_catalog_id=previous_catalog["catalog_id"]
+          )
+          previous_checkpoint = create_checkpoint(previous_catalog)
+          candidate_checkpoint = create_checkpoint(candidate_catalog)
+          previous_proof = create_proof(previous_catalog, previous_checkpoint, segment_index=1)
+          candidate_proof = create_proof(candidate_catalog, candidate_checkpoint, segment_index=2)
+          consistency = create_consistency_proof(
+              previous_catalog, previous_checkpoint, candidate_catalog, candidate_checkpoint
+          )
+          for name, payload in {
+              "previous-checkpoint.json": previous_checkpoint,
+              "candidate-checkpoint.json": candidate_checkpoint,
+              "previous-proof.json": previous_proof,
+              "candidate-proof.json": candidate_proof,
+              "consistency.json": consistency,
+          }.items():
+              (root / name).write_bytes(_canonical_bytes(payload))
+          anchor_manifest = create_bundle(
+              root / "anchor-bundle",
+              root / "previous-checkpoint.json",
+              previous_checkpoint["checkpoint_id"],
+              [root / "previous-proof.json"],
+          )
+          transition_manifest = create_bundle(
+              root / "transition-bundle",
+              root / "candidate-checkpoint.json",
+              candidate_checkpoint["checkpoint_id"],
+              [root / "candidate-proof.json"],
+              previous_checkpoint_path=root / "previous-checkpoint.json",
+              expected_previous_checkpoint_id=previous_checkpoint["checkpoint_id"],
+              consistency_path=root / "consistency.json",
+          )
+          anchor_verified = verify_bundle(
+              root / "anchor-bundle",
+              expected_bundle_id=anchor_manifest["bundle_id"],
+              expected_candidate_checkpoint_id=previous_checkpoint["checkpoint_id"],
+          )
+          transition_verified = verify_bundle(
+              root / "transition-bundle",
+              expected_bundle_id=transition_manifest["bundle_id"],
+              expected_candidate_checkpoint_id=candidate_checkpoint["checkpoint_id"],
+              expected_previous_checkpoint_id=previous_checkpoint["checkpoint_id"],
+          )
+          anchor_state = create_state(report(anchor_verified, 1), anchor_verified)
+          candidate_state = append_transition(
+              anchor_state, report(transition_verified, 2), transition_verified
+          )
+          fork_verified = dict(transition_verified)
+          fork_candidate = dict(transition_verified["candidate"])
+          fork_candidate.update(
+              checkpoint_id="f" * 64,
+              catalog_id="e" * 64,
+              merkle_root="d" * 64,
+          )
+          fork_verified.update(bundle_id="c" * 64, candidate=fork_candidate)
+          fork_state = append_transition(anchor_state, report(fork_verified, 3), fork_verified)
+          _atomic_write(root / "anchor-state.json", anchor_state, require_absent=True)
+          _atomic_write(root / "candidate-state.json", candidate_state, require_absent=True)
+          _atomic_write(root / "fork-state.json", fork_state, require_absent=True)
+          (root / "pins.json").write_text(json.dumps({
+              "anchor_state_id": anchor_state["state_id"],
+              "candidate_state_id": candidate_state["state_id"],
+              "fork_state_id": fork_state["state_id"],
+              "candidate_bundle_id": transition_manifest["bundle_id"],
+          }, sort_keys=True))
+          PY
+          ANCHOR_STATE_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["anchor_state_id"])' "$ROOT/pins.json")
+          CANDIDATE_STATE_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate_state_id"])' "$ROOT/pins.json")
+          FORK_STATE_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["fork_state_id"])' "$ROOT/pins.json")
+          CANDIDATE_BUNDLE_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate_bundle_id"])' "$ROOT/pins.json")
+
+          python agent_audit_trust_checkpoint.py create \
+            "$ROOT/candidate-state.json" "$ROOT/checkpoint.json" \
+            --expected-state-id "$CANDIDATE_STATE_ID" --format json \
+            > "$ROOT/create.json"
+          CHECKPOINT_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/create.json")
+          python agent_audit_trust_checkpoint.py prove \
+            "$ROOT/candidate-state.json" "$ROOT/checkpoint.json" "$ROOT/proof.json" \
+            --expected-state-id "$CANDIDATE_STATE_ID" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --bundle-id "$CANDIDATE_BUNDLE_ID" --format json \
+            > "$ROOT/prove.json"
+          python agent_audit_trust_checkpoint.py verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --bundle "$ROOT/transition-bundle" --format json \
+            > "$ROOT/verify-bundle.json"
+          rm "$ROOT/candidate-state.json"
+          python agent_audit_trust_checkpoint.py verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" --format json \
+            > "$ROOT/verify-proof-only.json"
+
+          python agent_audit_trust_checkpoint.py lineage \
+            "$ROOT/anchor-state.json" "$ROOT/fork-state.json" \
+            --expected-left-state-id "$ANCHOR_STATE_ID" \
+            --expected-right-state-id "$FORK_STATE_ID" --format json \
+            > "$ROOT/descendant.json"
+          set +e
+          python agent_audit_trust_checkpoint.py lineage \
+            "$ROOT/fork-state.json" "$ROOT/anchor-state.json" \
+            --expected-left-state-id "$FORK_STATE_ID" \
+            --expected-right-state-id "$ANCHOR_STATE_ID" --format json \
+            > "$ROOT/rollback.json"
+          ROLLBACK_STATUS=$?
+          python agent_audit_trust_checkpoint.py lineage \
+            "$ROOT/fork-state.json" "$ROOT/anchor-state.json" \
+            --expected-left-state-id "$FORK_STATE_ID" \
+            --expected-right-state-id "$ANCHOR_STATE_ID" --format json \
+            > /dev/null
+          set -e
+          test "$ROLLBACK_STATUS" -eq 1
+
+          set +e
+          python agent_audit_trust_checkpoint.py verify "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$(printf 'f%.0s' {1..64})" --format json \
+            > "$ROOT/stale.json" 2> "$ROOT/stale.err"
+          STALE_STATUS=$?
+          set -e
+          test "$STALE_STATUS" -eq 2
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "audit-trust-checkpoint"
+          created = json.loads((root / "create.json").read_text())
+          bound = json.loads((root / "verify-bundle.json").read_text())
+          proof_only = json.loads((root / "verify-proof-only.json").read_text())
+          descendant = json.loads((root / "descendant.json").read_text())
+          rollback = json.loads((root / "rollback.json").read_text())
+          assert len(created["checkpoint_id"]) == 64
+          assert bound["bundle_verified"] is True
+          assert proof_only["bundle_verified"] is False
+          assert descendant["accepted"] is True
+          assert descendant["relation"] == "right-descendant"
+          assert rollback["accepted"] is False
+          assert rollback["violations"][0]["rule_id"] == "ATC010"
+          assert "ATC003" in (root / "stale.err").read_text()
+          PY
+      - name: Preserve portable checkpoint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-trust-checkpoint-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-checkpoint/
+          if-no-files-found: error

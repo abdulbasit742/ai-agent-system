@@ -1,6 +1,6 @@
 # Security audit: Python distribution
 
-Task 6 introduced the installable wheel and console scripts. Tasks 14 through 22 expand the reviewed runtime boundary for strict audit integrity, typed event admission, segment rotation, canonical catalogs, portable catalog checkpoints, compact catalog consistency proofs, portable audit evidence bundles, consumer-owned bundle admission, and pinned audit bundle trust states while keeping the package dependency-free.
+Task 6 introduced the installable wheel and console scripts. Tasks 14 through 23 expand the reviewed runtime boundary for strict audit integrity, typed event admission, segment rotation, canonical catalogs, portable catalog checkpoints, compact catalog consistency proofs, portable audit evidence bundles, consumer-owned bundle admission, pinned audit bundle trust states, and portable audit trust checkpoints while keeping the package dependency-free.
 
 ## Dependency boundary
 
@@ -18,7 +18,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 22
 
 ## Wheel contents
 
-`scripts/validate_wheel.py` enforces an exact eighteen-module allowlist:
+`scripts/validate_wheel.py` enforces an exact nineteen-module allowlist:
 
 - `agent_audit.py`
 - `agent_audit_admission.py`
@@ -29,6 +29,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 22
 - `agent_audit_events.py`
 - `agent_audit_segments.py`
 - `agent_audit_trust.py`
+- `agent_audit_trust_checkpoint.py`
 - `agent_baseline.py`
 - `agent_changed_lines.py`
 - `agent_cli.py`
@@ -39,7 +40,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 22
 - `agent_system_legacy.py`
 - `agent_version.py`
 
-`agent_audit.py` verifies and appends canonical hash-chain records. `agent_audit_events.py` performs typed event admission and privacy normalization. `agent_audit_segments.py` seals verified typed logs and verifies archived-to-active continuity. `agent_audit_catalog.py` discovers sealed archives and synchronizes only right-descendant catalogs. `agent_audit_checkpoint.py` creates portable Merkle checkpoints and compact per-segment inclusion proofs. `agent_audit_consistency.py` creates and verifies compact append-only consistency proofs between pinned catalog checkpoints. `agent_audit_bundle.py` creates and verifies canonical exact-boundary offline handoff bundles. `agent_audit_admission.py` verifies those bundles first and then applies consumer-owned authorization policies. `agent_audit_trust.py` records admitted snapshot and transition bundles in an externally pinned canonical hash chain with lock-coordinated atomic advancement. The small `agent_system.py` wrapper combines audit controls while `agent_system_legacy.py` retains the reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
+`agent_audit.py` verifies and appends canonical hash-chain records. `agent_audit_events.py` performs typed event admission and privacy normalization. `agent_audit_segments.py` seals verified typed logs and verifies archived-to-active continuity. `agent_audit_catalog.py` discovers sealed archives and synchronizes only right-descendant catalogs. `agent_audit_checkpoint.py` creates portable Merkle checkpoints and compact per-segment inclusion proofs. `agent_audit_consistency.py` creates and verifies compact append-only consistency proofs between pinned catalog checkpoints. `agent_audit_bundle.py` creates and verifies canonical exact-boundary offline handoff bundles. `agent_audit_admission.py` verifies those bundles first and then applies consumer-owned authorization policies. `agent_audit_trust.py` records admitted snapshot and transition bundles in an externally pinned canonical hash chain with lock-coordinated atomic advancement. `agent_audit_trust_checkpoint.py` creates portable Merkle checkpoints and per-bundle inclusion proofs for that trust history, optionally re-verifies the authenticated portable bundle, and rejects rollback/fork lineage. The small `agent_system.py` wrapper combines audit controls while `agent_system_legacy.py` retains the reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
 
 The validator rejects:
 
@@ -48,7 +49,7 @@ The validator rejects:
 - runtime dependency declarations
 - multiple `.dist-info` directories
 - unsafe archive paths
-- tests, action metadata, integration locks, environment files, audit-log data, segment archives, catalogs, checkpoints, inclusion/consistency proofs, audit evidence bundles, admission policies, admission decisions, audit trust states, lock files, baselines, and generated reports
+- tests, action metadata, integration locks, environment files, audit-log data, segment archives, catalogs, checkpoints, inclusion/consistency proofs, audit evidence bundles, admission policies, admission decisions, audit trust states, audit trust checkpoints/proofs, lock files, baselines, and generated reports
 - wrong project name, version, Python requirement, or console entry points
 
 ## Installed command boundary
@@ -64,6 +65,7 @@ The exact reviewed command set is:
 - `basit-agent-audit-bundle`
 - `basit-agent-audit-admission`
 - `basit-agent-audit-trust`
+- `basit-agent-audit-trust-checkpoint`
 - `agent-system`
 - `agent-changed-lines`
 - `agent-audit-segments`
@@ -73,6 +75,7 @@ The exact reviewed command set is:
 - `agent-audit-bundle`
 - `agent-audit-admission`
 - `agent-audit-trust`
+- `agent-audit-trust-checkpoint`
 
 The release-admission default policy sources both module and command allowlists from `scripts/validate_wheel.py`, preventing package validation and consumer policy from drifting independently.
 
@@ -82,9 +85,9 @@ The installed wheel does not contain `integrations.lock.json` or cloned external
 
 ## Audit-data boundary
 
-Audit runtime code is included, but audit JSON Lines files, segment directories, manifests, catalog files, checkpoint files, inclusion/consistency proof files, audit bundle directories, admission policies, admission decisions, trust-state files, lock sidecars, recovery copies, reports, and CI evidence are not package source. Raw paths, command arrays, and Git refs are normalized to domain-separated references before new audit records are stored.
+Audit runtime code is included, but audit JSON Lines files, segment directories, manifests, catalog files, checkpoint files, inclusion/consistency proof files, audit bundle directories, admission policies, admission decisions, trust-state files, trust checkpoint/proof files, lock sidecars, recovery copies, reports, and CI evidence are not package source. Raw paths, command arrays, and Git refs are normalized to domain-separated references before new audit records are stored.
 
-Segment manifests, catalog entries, checkpoints, proofs, bundle manifests, admission reports, and trust-state entries contain only safe relative names, versions, indexes, counts, fixed roles and algorithm identifiers, hashes, generations, and stable diagnostics. Installed commands create runtime evidence only in caller-selected locations.
+Segment manifests, catalog entries, checkpoints, proofs, bundle manifests, admission reports, trust-state entries, and trust checkpoint/proof files contain only safe relative names, versions, indexes, counts, fixed roles and algorithm identifiers, hashes, generations, and stable diagnostics. Installed commands create runtime evidence only in caller-selected locations.
 
 ## Release boundary
 
@@ -92,4 +95,4 @@ Ordinary pull-request and push CI builds and validates the wheel but does not pu
 
 ## Installation verification
 
-CI builds a wheel on Python 3.11 and 3.12, validates the exact archive and script boundary, installs it into an isolated virtual environment without dependencies, and executes from outside the source checkout. Dedicated package workflows exercise all eighteen console aliases across the reviewed features. The audit trust package smoke creates a snapshot bundle and transition bundle, initializes a pinned state, advances it through the admitted transition, and verifies the resulting head through both trust aliases.
+CI builds a wheel on Python 3.11 and 3.12, validates the exact archive and script boundary, installs it into an isolated virtual environment without dependencies, and executes from outside the source checkout. Dedicated package workflows exercise all twenty console aliases across the reviewed features. The audit trust checkpoint package smoke creates a pinned checkpoint and inclusion proof, verifies the checkpoint against the state, removes the state, and verifies the proof through both installed aliases.
