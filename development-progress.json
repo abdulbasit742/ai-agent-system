@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 15,
-    "next_expected": 16
+    "latest_completed": 16,
+    "next_expected": 17
   },
   "completed": [
     {
@@ -111,6 +111,13 @@
       "status": "completed",
       "summary": "Added versioned exact schemas for reserved audit events, bounded generic events, privacy-preserving path/command/Git-ref references, typed coverage and event-count reporting, and explicit typed-only migration enforcement.",
       "verification": {"unit_tests": 246, "python_versions": ["3.11", "3.12"], "compileall": "passed", "reserved_event_schema_validation": "passed", "generic_event_boundary_validation": "passed", "credential_bearing_detail_rejection": "passed", "raw_path_command_and_git_ref_exclusion": "passed", "typed_coverage_and_event_counts": "passed", "legacy_compatibility_and_typed_only_gate": "passed", "added_line_event_compatibility": "passed", "read_only_event_admission_ci": "passed", "eleven_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 16,
+      "title": "Atomic audit segment rotation",
+      "status": "completed",
+      "summary": "Added lock-coordinated rotation of fully typed audit logs into canonical sealed directories, atomic linked active-log replacement, complete archived-chain verification, and externally pinned latest-segment rollback protection.",
+      "verification": {"unit_tests": 265, "python_versions": ["3.11", "3.12"], "compileall": "passed", "typed_source_preflight": "passed", "atomic_archive_and_active_replacement": "passed", "canonical_manifest_and_segment_digest": "passed", "two_segment_chain_and_active_continuity": "passed", "external_latest_segment_pin": "passed", "tamper_rehash_symlink_and_overwrite_rejection": "passed", "installed_segment_cli": "passed", "read_only_segment_ci": "passed", "twelve_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }

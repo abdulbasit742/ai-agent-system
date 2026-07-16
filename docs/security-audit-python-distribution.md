@@ -1,6 +1,6 @@
 # Security audit: Python distribution
 
-Task 6 introduced the installable wheel and console scripts. Tasks 14 and 15 expand the reviewed runtime boundary for strict audit integrity and typed event admission while keeping the package dependency-free.
+Task 6 introduced the installable wheel and console scripts. Tasks 14 through 16 expand the reviewed runtime boundary for strict audit integrity, typed event admission, and offline segment rotation while keeping the package dependency-free.
 
 ## Dependency boundary
 
@@ -13,15 +13,16 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 and 15 exp
 
 - `agent_version.py` is the single version source.
 - Package metadata reads that attribute dynamically.
-- All installed console aliases display the same version.
+- All installed console aliases display the same version where a version flag is part of their interface.
 - Unit tests reject version drift between the wrapper and package metadata.
 
 ## Wheel contents
 
-`scripts/validate_wheel.py` enforces an exact eleven-module allowlist:
+`scripts/validate_wheel.py` enforces an exact twelve-module allowlist:
 
 - `agent_audit.py`
 - `agent_audit_events.py`
+- `agent_audit_segments.py`
 - `agent_baseline.py`
 - `agent_changed_lines.py`
 - `agent_cli.py`
@@ -32,7 +33,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 and 15 exp
 - `agent_system_legacy.py`
 - `agent_version.py`
 
-`agent_audit.py` verifies and appends canonical hash-chain records. `agent_audit_events.py` performs typed event admission and privacy normalization. The small `agent_system.py` wrapper combines those controls while `agent_system_legacy.py` retains the previously reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
+`agent_audit.py` verifies and appends canonical hash-chain records. `agent_audit_events.py` performs typed event admission and privacy normalization. `agent_audit_segments.py` seals verified typed logs, creates canonical segment manifests, and verifies archived-to-active continuity. The small `agent_system.py` wrapper combines audit controls while `agent_system_legacy.py` retains the previously reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
 
 The validator rejects:
 
@@ -41,8 +42,21 @@ The validator rejects:
 - runtime dependency declarations
 - multiple `.dist-info` directories
 - unsafe archive paths
-- tests, action metadata, integration locks, environment files, audit-log data, baselines, and generated reports
+- tests, action metadata, integration locks, environment files, audit-log data, segment archives, baselines, and generated reports
 - wrong project name, version, Python requirement, or console entry points
+
+## Installed command boundary
+
+The exact reviewed command set is:
+
+- `basit-agent`
+- `basit-agent-lines`
+- `basit-agent-segments`
+- `agent-system`
+- `agent-changed-lines`
+- `agent-audit-segments`
+
+The release-admission default policy sources both module and command allowlists from `scripts/validate_wheel.py`, preventing package validation and consumer policy from drifting independently.
 
 ## Integration boundary
 
@@ -50,7 +64,9 @@ The installed wheel does not contain `integrations.lock.json` or cloned external
 
 ## Audit-data boundary
 
-Audit runtime code is included, but audit JSON Lines files, lock files, recovery copies, reports, and CI evidence are not package source. Raw paths, command arrays, and Git refs are normalized to domain-separated references before new audit records are stored.
+Audit runtime code is included, but audit JSON Lines files, segment directories, manifests, lock files, recovery copies, reports, and CI evidence are not package source. Raw paths, command arrays, and Git refs are normalized to domain-separated references before new audit records are stored.
+
+Segment manifests contain only fixed filenames, versions, indexes, counts, booleans, and hashes. Installed commands create archives only in caller-selected runtime locations.
 
 ## Release boundary
 
@@ -58,4 +74,4 @@ Ordinary pull-request and push CI builds and validates the wheel but does not pu
 
 ## Installation verification
 
-CI builds a wheel on Python 3.11 and 3.12, validates the archive, installs it into an isolated virtual environment without dependencies, checks all console aliases, performs a repository self-scan from outside the source directory, and verifies that installed audit commands create a fully typed privacy-safe chain.
+CI builds a wheel on Python 3.11 and 3.12, validates the exact archive and script boundary, installs it into an isolated virtual environment without dependencies, and executes from outside the source checkout. It checks the existing console aliases, performs a repository self-scan, verifies a fully typed privacy-safe audit chain, rotates that chain through `basit-agent-segments`, and independently verifies the sealed segment plus active continuation through `agent-audit-segments`.

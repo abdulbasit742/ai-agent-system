@@ -13,7 +13,7 @@ from typing import Any
 
 try:
     from agent_version import __version__
-except ModuleNotFoundError:  # Direct execution via `python scripts/validate_wheel.py`.
+except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from agent_version import __version__
 
@@ -22,6 +22,7 @@ EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
     "agent_audit.py",
     "agent_audit_events.py",
+    "agent_audit_segments.py",
     "agent_baseline.py",
     "agent_changed_lines.py",
     "agent_cli.py",
@@ -33,10 +34,12 @@ EXPECTED_MODULES = {
     "agent_version.py",
 }
 EXPECTED_SCRIPTS = {
+    "agent-audit-segments": "agent_audit_segments:main",
     "agent-changed-lines": "agent_cli:changed_lines_main",
     "agent-system": "agent_cli:main",
     "basit-agent": "agent_cli:main",
     "basit-agent-lines": "agent_cli:changed_lines_main",
+    "basit-agent-segments": "agent_audit_segments:main",
 }
 FORBIDDEN_FRAGMENTS = {
     ".env",

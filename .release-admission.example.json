@@ -15,6 +15,7 @@
     "modules": [
       "agent_audit.py",
       "agent_audit_events.py",
+      "agent_audit_segments.py",
       "agent_baseline.py",
       "agent_changed_lines.py",
       "agent_cli.py",
@@ -26,10 +27,12 @@
       "agent_version.py"
     ],
     "console_scripts": [
+      "agent-audit-segments",
       "agent-changed-lines",
       "agent-system",
       "basit-agent",
-      "basit-agent-lines"
+      "basit-agent-lines",
+      "basit-agent-segments"
     ],
     "max_runtime_dependencies": 0
   },
