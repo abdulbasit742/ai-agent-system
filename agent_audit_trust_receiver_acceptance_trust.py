@@ -28,6 +28,7 @@ _REPLACEMENTS = (
     ("AuditTrustReceiverBundleError", "AuditTrustReceiverAcceptanceBundleError"),
     ("AuditTrustReceiverAcceptanceError", "AuditTrustReceiverAcceptanceTrustError"),
     ('RULE_PREFIX = "ARS"', 'RULE_PREFIX = "ABT"'),
+    ("ARS", "ABT"),
     (
         'ENTRY_DOMAIN = b"audit-trust-receiver-acceptance-entry-v1"',
         'ENTRY_DOMAIN = b"audit-trust-receiver-acceptance-trust-entry-v1"',
@@ -71,7 +72,7 @@ _FORBIDDEN_AFTER_ADAPTATION = (
     "AuditTrustReceiverAdmissionError",
     "AuditTrustReceiverBundleError",
     "AuditTrustReceiverAcceptanceError",
-    'RULE_PREFIX = "ARS"',
+    "ARS",
     "candidate_receiver_checkpoint_id",
     "candidate_receiver_state_id",
     "previous_receiver_checkpoint_id",
