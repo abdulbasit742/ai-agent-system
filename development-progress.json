@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 5,
-    "next_expected": 6
+    "latest_completed": 6,
+    "next_expected": 7
   },
   "completed": [
     {
@@ -89,6 +89,27 @@
         "generated_output_confinement": "passed",
         "preview_free_annotations_and_sarif": "passed",
         "stale_report_protection": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 6,
+      "title": "Installable dependency-free Python package",
+      "status": "completed",
+      "summary": "Added canonical versioning, reviewed wheel metadata, four installed console commands, exact wheel-content validation, isolated installation tests, and a fail-closed boundary for source-only integrations.",
+      "verification": {
+        "unit_tests": 83,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "wheel_build": "passed",
+        "wheel_content_allowlist": "passed",
+        "zero_runtime_dependencies": "passed",
+        "isolated_wheel_install": "passed",
+        "console_aliases": "passed",
+        "canonical_version_source": "passed",
+        "source_only_integration_boundary": "passed",
+        "installed_self_scan_active_findings": 0,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
