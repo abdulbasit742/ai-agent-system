@@ -1,0 +1,102 @@
+name: audit-bundle-admission-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  admission-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise admission aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/admission-venv"
+          BIN="$RUNNER_TEMP/admission-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-admission"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/python" - <<'PY'
+          from pathlib import Path
+          from agent_audit import ZERO_HASH
+          from agent_audit_bundle import _canonical_bytes, create_bundle
+          from agent_audit_catalog import _build_catalog
+          from agent_audit_checkpoint import create_checkpoint, create_proof
+
+          root = Path.cwd().parent
+          entry = {
+              "segment_index": 1,
+              "directory": "segment-0001",
+              "segment_id": "1".zfill(64),
+              "previous_segment_id": ZERO_HASH,
+              "manifest_sha256": "2".zfill(64),
+              "segment_sha256": "3".zfill(64),
+              "head_hash": "4".zfill(64),
+              "records": 1,
+              "bytes": 100,
+          }
+          catalog = _build_catalog(
+              [entry],
+              generation=1,
+              previous_catalog_id=ZERO_HASH,
+          )
+          checkpoint = create_checkpoint(catalog)
+          proof = create_proof(catalog, checkpoint, segment_index=1)
+          checkpoint_path = root / "checkpoint.json"
+          proof_path = root / "proof.json"
+          checkpoint_path.write_bytes(_canonical_bytes(checkpoint))
+          proof_path.write_bytes(_canonical_bytes(proof))
+          manifest = create_bundle(
+              root / "bundle",
+              checkpoint_path,
+              checkpoint["checkpoint_id"],
+              [proof_path],
+          )
+          (root / "pins.txt").write_text(
+              manifest["bundle_id"] + "\n" + checkpoint["checkpoint_id"] + "\n"
+          )
+          PY
+          BUNDLE_ID=$(sed -n '1p' "$ROOT/pins.txt")
+          CHECKPOINT_ID=$(sed -n '2p' "$ROOT/pins.txt")
+
+          "$BIN/basit-agent-audit-admission" init "$ROOT/policy.json" \
+            --format json > "$ROOT/init.json"
+          "$BIN/agent-audit-admission" validate "$ROOT/policy.json" \
+            --format json > "$ROOT/validate.json"
+          "$BIN/basit-agent-audit-admission" evaluate "$ROOT/bundle" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/evaluate.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.cwd().parent
+          initialized = json.loads((root / "init.json").read_text())
+          validated = json.loads((root / "validate.json").read_text())
+          evaluated = json.loads((root / "evaluate.json").read_text())
+          assert initialized["valid"] is True
+          assert validated["valid"] is True
+          assert evaluated["admitted"] is True
+          assert evaluated["violations"] == []
+          assert evaluated["evidence"]["proof_count"] == 1
+          assert len(evaluated["decision_id"]) == 64
+          assert initialized["policy_sha256"] == validated["policy_sha256"]
+          assert validated["policy_sha256"] == evaluated["policy_sha256"]
+          PY
