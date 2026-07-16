@@ -16,7 +16,10 @@ All notable public distribution changes are recorded here.
 - versioned consumer release-admission policies with canonical policy hashes and stable `ADMxxx` denial rules
 - exact expected commit, version, optional release-ID, module, command, dependency, license, checksum, SBOM, and provenance admission constraints
 - distinct admitted (`0`), denied (`1`), and malformed/unverifiable (`2`) exit semantics
-- read-only CI release-readiness and admission artifacts with no publication, signing key, OIDC request, or registry credentials
+- verified release-to-release comparison with stable `TRNxxx` rollback, replay, mutation, interface, dependency, and license controls
+- deterministic module-hash, console-command, dependency-count, and license-set change reports with canonical transition IDs
+- caller-pinned previous release IDs and candidate commit/version/release identities for offline transition authorization
+- read-only CI release-readiness, admission, and transition artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
