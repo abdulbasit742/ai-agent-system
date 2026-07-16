@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 11,
-    "next_expected": 12
+    "latest_completed": 12,
+    "next_expected": 13
   },
   "completed": [
     {
@@ -27,7 +27,10 @@
       "summary": "Added integrity-checked, control-bound baselines and a new-findings-only CI mode for safe adoption in repositories with legacy findings.",
       "verification": {
         "unit_tests": 32,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "baseline_creation": "passed",
         "new_only_existing_findings": "passed",
@@ -43,7 +46,10 @@
       "summary": "Added merge-base changed-file scanning with safe Git ref resolution, NUL-delimited path parsing, repository-bound path validation, and baseline classification limited to the changed scope.",
       "verification": {
         "unit_tests": 43,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "git_scope_model": "passed",
         "changed_file_cli": "passed",
@@ -60,7 +66,10 @@
       "summary": "Added zero-context old/new hunk scopes and a low-noise gate that reports only findings starting on added or replaced lines while resolving baselines only through old changed lines.",
       "verification": {
         "unit_tests": 53,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "added_line_scope_model": "passed",
         "added_line_cli": "passed",
@@ -79,7 +88,10 @@
       "summary": "Added a read-only composite action with full, changed-file, and added-line modes, immutable pull-request event refs, workspace-contained controls, generated-output confinement, preview-free annotations and summaries, JSON/SARIF reports, and structured outputs.",
       "verification": {
         "unit_tests": 69,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "action_runner_tests": "passed",
         "action_output_boundary_tests": "passed",
@@ -100,7 +112,10 @@
       "summary": "Added canonical versioning, reviewed wheel metadata, four installed console commands, exact wheel-content validation, isolated installation tests, and a fail-closed boundary for source-only integrations.",
       "verification": {
         "unit_tests": 83,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "wheel_build": "passed",
         "wheel_content_allowlist": "passed",
@@ -121,7 +136,10 @@
       "summary": "Added deterministic release bundles, canonical source identity, byte-for-byte wheel comparison, SHA-256 checksums, manifest integrity verification, and a read-only non-publishing release-readiness workflow.",
       "verification": {
         "unit_tests": 95,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "byte_for_byte_wheel_reproducibility": "passed",
         "release_bundle_creation": "passed",
@@ -142,7 +160,10 @@
       "summary": "Added per-wheel SPDX 2.3 JSON SBOMs, unsigned in-toto/SLSA-style provenance, manifest-bound evidence digests, semantic evidence regeneration, and read-only supply-chain validation in release CI.",
       "verification": {
         "unit_tests": 109,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "spdx_sbom_generation": "passed",
         "module_hash_inventory": "passed",
@@ -163,7 +184,10 @@
       "summary": "Added a versioned offline consumer policy gate that verifies a release bundle first, then admits or denies it using exact source identity, artifact, module, command, dependency, license, checksum, SBOM, provenance, and unsigned-evidence constraints.",
       "verification": {
         "unit_tests": 124,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "policy_schema_and_hash": "passed",
         "exact_commit_version_and_release_id_binding": "passed",
@@ -183,7 +207,10 @@
       "summary": "Added deterministic comparison of two fully verified release bundles, caller-pinned trusted and candidate identities, rollback/replay/same-version-mutation detection, module and interface change analysis, and a read-only transition decision workflow.",
       "verification": {
         "unit_tests": 144,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "policy_schema_and_hash": "passed",
         "trusted_release_anchor_binding": "passed",
@@ -203,7 +230,10 @@
       "summary": "Added a consumer-owned canonical hash-chain state with externally retained state IDs, exact anchor and bundle-head binding, accepted-transition recording, duplicate-release prevention, lock-coordinated atomic updates, and stale/fork/tamper rejection.",
       "verification": {
         "unit_tests": 162,
-        "python_versions": ["3.11", "3.12"],
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
         "compileall": "passed",
         "canonical_state_and_entry_hashes": "passed",
         "external_state_id_rollback_pin": "passed",
@@ -213,6 +243,30 @@
         "atomic_lock_coordinated_updates": "passed",
         "stale_pin_and_tampered_history_rejection": "passed",
         "read_only_trust_state_ci": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 12,
+      "title": "Portable Merkle release checkpoints",
+      "status": "completed",
+      "summary": "Added canonical unsigned Merkle checkpoints, externally pinned checkpoint IDs, portable release inclusion proofs, immutable atomic proof artifacts, and rollback/fork lineage gates for consumer trust-state distribution and recovery.",
+      "verification": {
+        "unit_tests": 181,
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
+        "compileall": "passed",
+        "canonical_checkpoint_and_merkle_root": "passed",
+        "external_checkpoint_id_pin": "passed",
+        "portable_inclusion_proofs": "passed",
+        "odd_tree_and_boundary_proofs": "passed",
+        "rehashed_proof_tamper_rejection": "passed",
+        "immutable_atomic_artifacts": "passed",
+        "rollback_and_fork_lineage_gates": "passed",
+        "read_only_checkpoint_ci": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

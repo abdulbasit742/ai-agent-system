@@ -1,0 +1,278 @@
+name: release-checkpoint
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checkpoint-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test portable Merkle checkpoints
+        run: python -m unittest discover -s tests -p "test_release_checkpoint.py" -v
+      - name: Compile checkpoint tooling
+        run: python -m compileall -q scripts/release_checkpoint.py tests/test_release_checkpoint.py
+
+  checkpoint-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build verified anchor release
+        id: anchor
+        run: |
+          EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH="$EPOCH"
+          python -m pip wheel . --no-deps --wheel-dir dist-checkpoint-anchor
+          python scripts/release_bundle.py create \
+            --wheel dist-checkpoint-anchor/*.whl \
+            --output-dir release-checkpoint-anchor \
+            --source-commit "$GITHUB_SHA" \
+            --source-date-epoch "$EPOCH"
+          python scripts/release_bundle.py verify release-checkpoint-anchor
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path('release-checkpoint-anchor/release-manifest.json').read_text())
+          print(f"release_id={manifest['release_id']}")
+          print(f"version={manifest['version']}")
+          print(f"epoch={manifest['source']['source_date_epoch']}")
+          PY
+      - name: Initialize pinned anchor trust state
+        id: state
+        env:
+          RELEASE_ID: ${{ steps.anchor.outputs.release_id }}
+          VERSION: ${{ steps.anchor.outputs.version }}
+        run: |
+          python scripts/release_trust.py init \
+            "$RUNNER_TEMP/state-anchor.json" \
+            release-checkpoint-anchor \
+            --expected-release-id "$RELEASE_ID" \
+            --expected-source-commit "$GITHUB_SHA" \
+            --expected-version "$VERSION" \
+            > "$RUNNER_TEMP/state-init.json"
+          cp "$RUNNER_TEMP/state-anchor.json" "$RUNNER_TEMP/state-a.json"
+          cp "$RUNNER_TEMP/state-anchor.json" "$RUNNER_TEMP/state-b.json"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path(os.environ['RUNNER_TEMP'], 'state-init.json').read_text())
+          print(f"state_id={result['state_id']}")
+          PY
+      - name: Build two distinct verified candidates
+        id: candidates
+        env:
+          ANCHOR_EPOCH: ${{ steps.anchor.outputs.epoch }}
+        run: |
+          for LABEL in a b; do
+            SOURCE="$RUNNER_TEMP/source-$LABEL"
+            cp -a . "$SOURCE"
+            rm -rf \
+              "$SOURCE/.git" \
+              "$SOURCE/dist-checkpoint-anchor" \
+              "$SOURCE/release-checkpoint-anchor"
+            printf '\n# checkpoint candidate %s\n' "$LABEL" >> "$SOURCE/agent_system.py"
+          done
+
+          EPOCH_A="$((ANCHOR_EPOCH + 1))"
+          EPOCH_B="$((ANCHOR_EPOCH + 2))"
+          COMMIT_A="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          COMMIT_B="cccccccccccccccccccccccccccccccccccccccc"
+
+          (
+            cd "$RUNNER_TEMP/source-a"
+            export SOURCE_DATE_EPOCH="$EPOCH_A"
+            python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/dist-candidate-a"
+            python scripts/release_bundle.py create \
+              --wheel "$RUNNER_TEMP"/dist-candidate-a/*.whl \
+              --output-dir "$RUNNER_TEMP/release-candidate-a" \
+              --source-commit "$COMMIT_A" \
+              --source-date-epoch "$EPOCH_A"
+            python scripts/release_bundle.py verify "$RUNNER_TEMP/release-candidate-a"
+          )
+          (
+            cd "$RUNNER_TEMP/source-b"
+            export SOURCE_DATE_EPOCH="$EPOCH_B"
+            python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/dist-candidate-b"
+            python scripts/release_bundle.py create \
+              --wheel "$RUNNER_TEMP"/dist-candidate-b/*.whl \
+              --output-dir "$RUNNER_TEMP/release-candidate-b" \
+              --source-commit "$COMMIT_B" \
+              --source-date-epoch "$EPOCH_B"
+            python scripts/release_bundle.py verify "$RUNNER_TEMP/release-candidate-b"
+          )
+
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          a = json.loads((root / 'release-candidate-a' / 'release-manifest.json').read_text())
+          b = json.loads((root / 'release-candidate-b' / 'release-manifest.json').read_text())
+          print(f"release_a={a['release_id']}")
+          print(f"release_b={b['release_id']}")
+          print(f"version={a['version']}")
+          print("commit_a=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+          print("commit_b=cccccccccccccccccccccccccccccccccccccccc")
+          PY
+      - name: Advance two forked trust states explicitly
+        id: advance
+        env:
+          ANCHOR_STATE_ID: ${{ steps.state.outputs.state_id }}
+          RELEASE_A: ${{ steps.candidates.outputs.release_a }}
+          RELEASE_B: ${{ steps.candidates.outputs.release_b }}
+          VERSION: ${{ steps.candidates.outputs.version }}
+          COMMIT_A: ${{ steps.candidates.outputs.commit_a }}
+          COMMIT_B: ${{ steps.candidates.outputs.commit_b }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          policy = json.loads(Path('.release-transition.example.json').read_text())
+          policy['identity']['allow_same_version_mutation'] = True
+          Path(os.environ['RUNNER_TEMP'], 'checkpoint-transition-policy.json').write_text(
+              json.dumps(policy, sort_keys=True, indent=2) + '\n'
+          )
+          PY
+          python scripts/release_trust.py advance \
+            "$RUNNER_TEMP/state-a.json" \
+            release-checkpoint-anchor \
+            "$RUNNER_TEMP/release-candidate-a" \
+            --policy "$RUNNER_TEMP/checkpoint-transition-policy.json" \
+            --expected-state-id "$ANCHOR_STATE_ID" \
+            --expected-candidate-source-commit "$COMMIT_A" \
+            --expected-candidate-version "$VERSION" \
+            --expected-candidate-release-id "$RELEASE_A" \
+            > "$RUNNER_TEMP/advance-a.json"
+          python scripts/release_trust.py advance \
+            "$RUNNER_TEMP/state-b.json" \
+            release-checkpoint-anchor \
+            "$RUNNER_TEMP/release-candidate-b" \
+            --policy "$RUNNER_TEMP/checkpoint-transition-policy.json" \
+            --expected-state-id "$ANCHOR_STATE_ID" \
+            --expected-candidate-source-commit "$COMMIT_B" \
+            --expected-candidate-version "$VERSION" \
+            --expected-candidate-release-id "$RELEASE_B" \
+            > "$RUNNER_TEMP/advance-b.json"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          a = json.loads((root / 'advance-a.json').read_text())
+          b = json.loads((root / 'advance-b.json').read_text())
+          print(f"state_a={a['state_id']}")
+          print(f"state_b={b['state_id']}")
+          PY
+      - name: Create and verify portable checkpoint and proofs
+        id: checkpoint
+        env:
+          STATE_A: ${{ steps.advance.outputs.state_a }}
+        run: |
+          python scripts/release_checkpoint.py create \
+            "$RUNNER_TEMP/state-a.json" \
+            "$RUNNER_TEMP/checkpoint.json" \
+            --expected-state-id "$STATE_A" \
+            > "$RUNNER_TEMP/checkpoint-create.json"
+          CHECKPOINT_ID="$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          print(json.loads(Path(os.environ['RUNNER_TEMP'], 'checkpoint-create.json').read_text())['checkpoint_id'])
+          PY
+          )"
+          echo "checkpoint_id=$CHECKPOINT_ID" >> "$GITHUB_OUTPUT"
+          python scripts/release_checkpoint.py verify \
+            "$RUNNER_TEMP/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --state "$RUNNER_TEMP/state-a.json" \
+            --expected-state-id "$STATE_A"
+          for SEQUENCE in 1 2; do
+            python scripts/release_checkpoint.py prove \
+              "$RUNNER_TEMP/state-a.json" \
+              "$RUNNER_TEMP/checkpoint.json" \
+              "$RUNNER_TEMP/proof-$SEQUENCE.json" \
+              --expected-state-id "$STATE_A" \
+              --expected-checkpoint-id "$CHECKPOINT_ID" \
+              --sequence "$SEQUENCE"
+            python scripts/release_checkpoint.py verify-proof \
+              "$RUNNER_TEMP/proof-$SEQUENCE.json" \
+              "$RUNNER_TEMP/checkpoint.json" \
+              --expected-checkpoint-id "$CHECKPOINT_ID"
+          done
+      - name: Verify descendant, rollback, and fork lineage gates
+        env:
+          ANCHOR_STATE: ${{ steps.state.outputs.state_id }}
+          STATE_A: ${{ steps.advance.outputs.state_a }}
+          STATE_B: ${{ steps.advance.outputs.state_b }}
+        run: |
+          python scripts/release_checkpoint.py lineage \
+            "$RUNNER_TEMP/state-anchor.json" \
+            "$RUNNER_TEMP/state-a.json" \
+            --expected-left-state-id "$ANCHOR_STATE" \
+            --expected-right-state-id "$STATE_A" \
+            > "$RUNNER_TEMP/descendant.json"
+
+          set +e
+          python scripts/release_checkpoint.py lineage \
+            "$RUNNER_TEMP/state-a.json" \
+            "$RUNNER_TEMP/state-anchor.json" \
+            --expected-left-state-id "$STATE_A" \
+            --expected-right-state-id "$ANCHOR_STATE" \
+            > "$RUNNER_TEMP/rollback.json"
+          ROLLBACK_STATUS=$?
+          python scripts/release_checkpoint.py lineage \
+            "$RUNNER_TEMP/state-a.json" \
+            "$RUNNER_TEMP/state-b.json" \
+            --expected-left-state-id "$STATE_A" \
+            --expected-right-state-id "$STATE_B" \
+            > "$RUNNER_TEMP/fork.json"
+          FORK_STATUS=$?
+          set -e
+          test "$ROLLBACK_STATUS" -eq 1
+          test "$FORK_STATUS" -eq 1
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          descendant = json.loads((root / 'descendant.json').read_text())
+          rollback = json.loads((root / 'rollback.json').read_text())
+          fork = json.loads((root / 'fork.json').read_text())
+          assert descendant['relation'] == 'right-descendant' and descendant['accepted'] is True
+          assert rollback['relation'] == 'rollback' and rollback['violations'][0]['rule_id'] == 'CHK010'
+          assert fork['relation'] == 'fork' and fork['violations'][0]['rule_id'] == 'CHK011'
+          PY
+      - name: Preserve checkpoint evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-checkpoint-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/checkpoint.json
+            ${{ runner.temp }}/proof-1.json
+            ${{ runner.temp }}/proof-2.json
+            ${{ runner.temp }}/descendant.json
+            ${{ runner.temp }}/rollback.json
+            ${{ runner.temp }}/fork.json
+          if-no-files-found: error

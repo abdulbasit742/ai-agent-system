@@ -22,7 +22,10 @@ All notable public distribution changes are recorded here.
 - canonical hash-chained consumer trust states with externally retained `state_id` rollback and fork checkpoints
 - lock-coordinated atomic trust-state advancement that records only accepted transition IDs and policy hashes
 - stale-pin, duplicate-release, non-canonical serialization, symlink, truncation, and tampered-history rejection
-- read-only CI release-readiness, admission, transition, and trust-state artifacts with no publication, signing key, OIDC request, or registry credentials
+- canonical unsigned Merkle checkpoints with externally retained `checkpoint_id` freshness pins
+- portable inclusion proofs for individual trusted releases without distributing the complete history
+- stable `CHK010` rollback and `CHK011` fork lineage denials with common-prefix diagnostics
+- read-only CI release-readiness, admission, transition, trust-state, and checkpoint artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 

@@ -42,7 +42,12 @@
 - Every trust-state verify or advance must require the latest externally retained `state_id`; an internally valid state without that pin is not rollback or fork protection.
 - Trust-state mutation must verify both bundles, require the previous bundle to equal the current head, reject duplicate release IDs, and append only accepted transition IDs and policy hashes.
 - Trust-state writes must remain symlink-safe, lock-coordinated, same-directory atomic replacements; denied or stale-pin operations must leave state bytes unchanged.
-- Ordinary CI may build, verify, admit, compare, exercise temporary trust states, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Release checkpoints must bind the exact pinned state ID, head, entry count, and a domain-separated SHA-256 Merkle root over canonical trust entries.
+- Checkpoint and inclusion-proof verification must require an externally retained checkpoint ID; self-consistent unsigned files alone are not freshness or signer authentication.
+- Merkle leaves and nodes must retain separate `0x00` and `0x01` domains and RFC 6962 largest-power-of-two splitting; never duplicate odd leaves or silently change tree construction.
+- Checkpoint and proof outputs must be immutable, symlink-safe, canonical, and atomic no-overwrite creations. Rehashed proof changes must still reconstruct the pinned root.
+- Trust-state lineage gates must accept only identical or right-descendant histories and retain stable `CHK010` rollback and `CHK011` fork denials; never merge forks automatically.
+- Ordinary CI may build, verify, admit, compare, exercise temporary trust states and checkpoints, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
@@ -63,6 +68,7 @@ python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m unittest discover -s tests -p "test_release_admission.py" -v
 python -m unittest discover -s tests -p "test_release_transition.py" -v
 python -m unittest discover -s tests -p "test_release_trust.py" -v
+python -m unittest discover -s tests -p "test_release_checkpoint.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
