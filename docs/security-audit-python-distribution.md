@@ -1,6 +1,6 @@
 # Security audit: Python distribution
 
-Task 6 introduced the installable wheel and console scripts. Tasks 14 through 35 expand the reviewed runtime boundary for strict audit integrity, typed event admission, segment rotation, canonical catalogs, portable catalog checkpoints, compact catalog consistency proofs, portable audit evidence bundles, consumer-owned bundle admission, pinned audit bundle trust states, portable audit trust checkpoints, compact audit trust consistency proofs, portable trust handoff bundles, consumer-owned trust handoff admission, pinned receiver states, portable receiver checkpoints, compact receiver consistency proofs, portable receiver checkpoint bundles, consumer-owned receiver bundle admission, pinned receiver-bundle acceptance states, portable acceptance-state checkpoints, compact acceptance consistency proofs, and portable acceptance checkpoint bundles while keeping the package dependency-free.
+Task 6 introduced the installable wheel and console scripts. Tasks 14 through 36 expand the reviewed runtime boundary for strict audit integrity, typed event admission, segment rotation, canonical catalogs, portable catalog checkpoints, compact catalog consistency proofs, portable audit evidence bundles, consumer-owned bundle admission, pinned audit bundle trust states, portable audit trust checkpoints, compact audit trust consistency proofs, portable trust handoff bundles, consumer-owned trust handoff admission, pinned receiver states, portable receiver checkpoints, compact receiver consistency proofs, portable receiver checkpoint bundles, consumer-owned receiver bundle admission, pinned receiver-bundle acceptance states, portable acceptance-state checkpoints, compact acceptance consistency proofs, portable acceptance checkpoint bundles, and consumer-owned acceptance-bundle admission while keeping the package dependency-free.
 
 ## Dependency boundary
 
@@ -18,7 +18,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 35
 
 ## Wheel contents
 
-`scripts/validate_wheel.py` enforces an exact thirty-two-module allowlist:
+`scripts/validate_wheel.py` enforces an exact thirty-three-module allowlist:
 
 - `agent_audit.py`
 - `agent_audit_admission.py`
@@ -36,6 +36,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 35
 - `agent_audit_trust_bundle_core.py`
 - `agent_audit_trust_receiver.py`
 - `agent_audit_trust_receiver_acceptance.py`
+- `agent_audit_trust_receiver_acceptance_admission.py`
 - `agent_audit_trust_receiver_acceptance_bundle.py`
 - `agent_audit_trust_receiver_acceptance_checkpoint.py`
 - `agent_audit_trust_receiver_acceptance_consistency.py`
@@ -53,7 +54,7 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 35
 - `agent_system_legacy.py`
 - `agent_version.py`
 
-`agent_audit.py` verifies and appends canonical hash-chain records. `agent_audit_events.py` performs typed event admission and privacy normalization. `agent_audit_segments.py` seals verified typed logs and verifies archived-to-active continuity. `agent_audit_catalog.py` discovers sealed archives and synchronizes only right-descendant catalogs. `agent_audit_checkpoint.py` creates portable Merkle checkpoints and compact per-segment inclusion proofs. `agent_audit_consistency.py` creates and verifies compact append-only consistency proofs between pinned catalog checkpoints. `agent_audit_bundle.py` creates and verifies canonical exact-boundary offline handoff bundles. `agent_audit_admission.py` verifies those bundles first and then applies consumer-owned authorization policies. `agent_audit_trust.py` records admitted snapshot and transition bundles in an externally pinned canonical hash chain with lock-coordinated atomic advancement. `agent_audit_trust_checkpoint.py` creates portable Merkle checkpoints and per-bundle inclusion proofs for that trust history. `agent_audit_trust_consistency.py` creates compact append-only consistency proofs between pinned trust checkpoints. `agent_audit_trust_bundle.py` is the public trust-handoff interface; `agent_audit_trust_bundle_core.py` contains the reviewed exact-boundary implementation while the interface binds trust-specific canonical evidence serialization. `agent_audit_trust_admission.py` fully verifies a handoff before applying consumer-owned bundle, candidate identity, selection, and transition policies. `agent_audit_trust_receiver.py` maintains the consumer-owned accepted-handoff history. `agent_audit_trust_receiver_checkpoint.py` creates portable receiver checkpoints, per-handoff inclusion proofs, optional handoff binding, and lineage reports. `agent_audit_trust_receiver_consistency.py` loads the reviewed compact-range engine in a private namespace and binds receiver-specific validation and hash domains. `agent_audit_trust_receiver_bundle.py` packages pinned receiver checkpoints and proofs into immutable exact-boundary directories. `agent_audit_trust_receiver_admission.py` verifies complete receiver bundles before applying consumer-owned policies. `agent_audit_trust_receiver_acceptance.py` anchors admitted receiver snapshot bundles and atomically advances admitted receiver transition bundles. `agent_audit_trust_receiver_acceptance_checkpoint.py` binds the reviewed receiver-checkpoint engine to acceptance-state schemas. `agent_audit_trust_receiver_acceptance_consistency.py` binds the reviewed compact-range engine to nested receiver/trust acceptance continuity. `agent_audit_trust_receiver_acceptance_bundle.py` loads the reviewed receiver-bundle source through a deterministic private adapter and binds acceptance checkpoint/proof/consistency imports, file names, roles, hash domain, diagnostics, immutable publication, and offline verification without mutating the original receiver-bundle module. The small `agent_system.py` wrapper combines audit controls while `agent_system_legacy.py` retains the reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
+The audit, trust, receiver, acceptance, checkpoint, consistency, bundle, and admission modules preserve strict canonical schemas, external pinning, immutable artifacts, and consumer-owned authorization. `agent_audit_trust_receiver_acceptance_admission.py` loads the reviewed receiver-admission engine in a private namespace, binds acceptance-bundle verification and acceptance-specific policy schemas, and emits independent `ABA001`–`ABA016` decisions without mutating the original receiver-admission module. The small `agent_system.py` wrapper combines audit controls while `agent_system_legacy.py` retains the reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
 
 The validator rejects:
 
@@ -67,14 +68,7 @@ The validator rejects:
 
 ## Installed command boundary
 
-The exact reviewed command set contains forty-four aliases:
-
-- `basit-agent`, `basit-agent-lines`, `basit-agent-segments`;
-- `basit-agent-catalog`, `basit-agent-catalog-checkpoint`, `basit-agent-catalog-consistency`;
-- `basit-agent-audit-bundle`, `basit-agent-audit-admission`, `basit-agent-audit-trust`;
-- `basit-agent-audit-trust-checkpoint`, `basit-agent-audit-trust-consistency`, `basit-agent-audit-trust-bundle`, `basit-agent-audit-trust-admission`;
-- `basit-agent-audit-trust-receiver`, `basit-agent-audit-trust-receiver-checkpoint`, `basit-agent-audit-trust-receiver-consistency`, `basit-agent-audit-trust-receiver-bundle`, `basit-agent-audit-trust-receiver-admission`, `basit-agent-audit-trust-receiver-acceptance`, `basit-agent-audit-trust-receiver-acceptance-checkpoint`, `basit-agent-audit-trust-receiver-acceptance-consistency`, `basit-agent-audit-trust-receiver-acceptance-bundle`;
-- the corresponding twenty-two `agent-*` compatibility aliases.
+The exact reviewed command set contains forty-six aliases. The `basit-agent-*` surface includes the existing twenty-two commands plus `basit-agent-audit-trust-receiver-acceptance-admission`; the corresponding twenty-three `agent-*` compatibility aliases provide the same entry points.
 
 The release-admission default policy uses the same exact module and command allowlists as the wheel validator, preventing package validation and consumer policy from drifting independently.
 
@@ -94,4 +88,4 @@ Ordinary pull-request and push CI builds and validates the wheel but does not pu
 
 ## Installation verification
 
-CI builds a wheel on Python 3.11 and 3.12, validates the exact archive and script boundary, installs it into an isolated virtual environment without dependencies, and executes from outside the source checkout. Dedicated package workflows exercise all forty-four console aliases. The acceptance-bundle package smoke creates a canonical acceptance history through installed modules, generates checkpoints, head proofs, and consistency evidence, creates snapshot and transition bundles through both installed aliases, removes loose evidence, and verifies both bundles on each supported Python version.
+CI builds a wheel on Python 3.11 and 3.12, validates the exact archive and script boundary, installs it into an isolated virtual environment without dependencies, and executes from outside the source checkout. Dedicated package workflows exercise all forty-six console aliases. The acceptance-admission package smoke constructs real acceptance histories and bundles through installed modules, initializes and validates a policy, and evaluates snapshot and transition bundles through both installed aliases on each supported Python version.
