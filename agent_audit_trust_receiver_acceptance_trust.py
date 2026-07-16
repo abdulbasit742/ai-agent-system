@@ -56,7 +56,6 @@ _REPLACEMENTS = (
     ('"previous_state_id"', '"previous_acceptance_state_id"'),
     ('"entry_delta"', '"acceptance_entry_delta"'),
     ('"trust_entry_delta"', '"receiver_entry_delta"'),
-    ('"head_bundle_id": head.get("head_bundle_id")', '"head_bundle_id": head.get("handoff_bundle_id")'),
     ("receiver acceptance", "acceptance-bundle trust"),
     ("receiver bundle", "acceptance bundle"),
     ("receiver checkpoint", "acceptance checkpoint"),
