@@ -43,6 +43,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_added_line_gate.py" -v
       - name: Test GitHub Action runner
         run: python -m unittest discover -s tests -p "test_github_action.py" -v
+      - name: Test GitHub Action output boundary
+        run: python -m unittest discover -s tests -p "test_action_entrypoint.py" -v
       - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
@@ -68,7 +70,7 @@ jobs:
           sarif-path: .agent-system/action-smoke.sarif
       - name: Validate action outputs and reports
         env:
-          FINDING_COUNT: ${{ steps.basit.outputs.finding-count }}
+          FINDING_COUNT: ${{ steps.basit.outputs['finding-count'] }}
           ACTION_STATUS: ${{ steps.basit.outputs.status }}
         run: |
           python - <<'PY'
