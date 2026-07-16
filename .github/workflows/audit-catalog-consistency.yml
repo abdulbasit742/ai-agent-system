@@ -237,3 +237,98 @@ jobs:
           name: basit-agent-system-audit-catalog-consistency-${{ github.sha }}
           path: ${{ runner.temp }}/audit-catalog-consistency/
           if-no-files-found: error
+
+  consistency-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise consistency aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/consistency-venv"
+          BIN="$RUNNER_TEMP/consistency-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-consistency"
+          PREVIOUS_ARCHIVE="$ROOT/previous/segments"
+          CANDIDATE_ARCHIVE="$ROOT/candidate/segments"
+          ACTIVE="$ROOT/candidate/active.jsonl"
+          PREVIOUS_CATALOG="$PREVIOUS_ARCHIVE/catalog.json"
+          CANDIDATE_CATALOG="$CANDIDATE_ARCHIVE/catalog.json"
+          PREVIOUS_CHECKPOINT="$ROOT/previous-checkpoint.json"
+          CANDIDATE_CHECKPOINT="$ROOT/candidate-checkpoint.json"
+          PROOF="$ROOT/consistency.json"
+          mkdir -p "$PREVIOUS_ARCHIVE" "$CANDIDATE_ARCHIVE" "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/basit-agent" --audit-log "$ACTIVE" scan "$GITHUB_WORKSPACE" \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          "$BIN/basit-agent-segments" rotate --path "$ACTIVE" \
+            --output-dir "$CANDIDATE_ARCHIVE/segment-one" --format json \
+            > "$ROOT/rotate-one.json"
+          cp -R "$CANDIDATE_ARCHIVE/segment-one" "$PREVIOUS_ARCHIVE/segment-one"
+          "$BIN/basit-agent-catalog" init "$CANDIDATE_CATALOG" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog-one.json"
+          CATALOG_ONE=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-one.json")
+          cp "$CANDIDATE_CATALOG" "$PREVIOUS_CATALOG"
+          "$BIN/basit-agent-catalog-checkpoint" create \
+            "$PREVIOUS_CATALOG" "$PREVIOUS_CHECKPOINT" \
+            --expected-catalog-id "$CATALOG_ONE" --format json \
+            > "$ROOT/previous-checkpoint-report.json"
+          PREVIOUS_CHECKPOINT_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/previous-checkpoint-report.json")
+
+          "$BIN/basit-agent" --audit-log "$ACTIVE" guard python -m unittest \
+            > "$ROOT/guard.json"
+          "$BIN/basit-agent-segments" rotate --path "$ACTIVE" \
+            --output-dir "$CANDIDATE_ARCHIVE/segment-two" --format json \
+            > "$ROOT/rotate-two.json"
+          "$BIN/basit-agent-catalog" sync "$CANDIDATE_CATALOG" \
+            --expected-catalog-id "$CATALOG_ONE" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog-two.json"
+          CANDIDATE_CATALOG_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-two.json")
+          "$BIN/basit-agent-catalog-checkpoint" create \
+            "$CANDIDATE_CATALOG" "$CANDIDATE_CHECKPOINT" \
+            --expected-catalog-id "$CANDIDATE_CATALOG_ID" --active "$ACTIVE" \
+            --format json > "$ROOT/candidate-checkpoint-report.json"
+          CANDIDATE_CHECKPOINT_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/candidate-checkpoint-report.json")
+
+          "$BIN/basit-agent-catalog-consistency" prove \
+            "$PREVIOUS_CATALOG" "$PREVIOUS_CHECKPOINT" \
+            "$CANDIDATE_CATALOG" "$CANDIDATE_CHECKPOINT" "$PROOF" \
+            --expected-previous-catalog-id "$CATALOG_ONE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --candidate-active "$ACTIVE" --format json > "$ROOT/proof.json"
+          rm -rf "$ROOT/previous" "$ROOT/candidate"
+          "$BIN/agent-audit-catalog-consistency" verify \
+            "$PROOF" "$PREVIOUS_CHECKPOINT" "$CANDIDATE_CHECKPOINT" \
+            --expected-previous-catalog-id "$CATALOG_ONE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/verify.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'installed-consistency'
+          proof = json.loads((root / 'proof.json').read_text())
+          verified = json.loads((root / 'verify.json').read_text())
+          assert proof['accepted'] is verified['accepted'] is True
+          assert proof['relation'] == verified['relation'] == 'right-descendant'
+          assert proof['direct_predecessor_verified'] is True
+          assert proof['consistency_id'] == verified['consistency_id']
+          PY
