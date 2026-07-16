@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 14,
-    "next_expected": 15
+    "latest_completed": 15,
+    "next_expected": 16
   },
   "completed": [
     {
@@ -104,6 +104,13 @@
       "status": "completed",
       "summary": "Added strict canonical audit schemas, full-chain append preflight, stable AUDxxx diagnostics, external freshness pins, lock-coordinated appends, immutable verified-prefix recovery, and corrupt-log command blocking.",
       "verification": {"unit_tests": 227, "python_versions": ["3.11", "3.12"], "compileall": "passed", "legacy_and_versioned_schema_validation": "passed", "strict_json_and_canonical_record_validation": "passed", "complete_chain_append_preflight": "passed", "external_head_and_count_pins": "passed", "verified_prefix_recovery": "passed", "symlink_overwrite_and_partial_write_rejection": "passed", "read_only_audit_integrity_ci": "passed", "ten_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 15,
+      "title": "Typed privacy-safe audit events",
+      "status": "completed",
+      "summary": "Added versioned exact schemas for reserved audit events, bounded generic events, privacy-preserving path/command/Git-ref references, typed coverage and event-count reporting, and explicit typed-only migration enforcement.",
+      "verification": {"unit_tests": 246, "python_versions": ["3.11", "3.12"], "compileall": "passed", "reserved_event_schema_validation": "passed", "generic_event_boundary_validation": "passed", "credential_bearing_detail_rejection": "passed", "raw_path_command_and_git_ref_exclusion": "passed", "typed_coverage_and_event_counts": "passed", "legacy_compatibility_and_typed_only_gate": "passed", "added_line_event_compatibility": "passed", "read_only_event_admission_ci": "passed", "eleven_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
