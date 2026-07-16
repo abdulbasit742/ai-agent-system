@@ -13,6 +13,10 @@
 - Changed-scope baseline resolution must never classify unrelated baseline paths as resolved.
 - Added-line gates must filter current findings with new-side ranges and baseline resolutions with old-side ranges; never reuse one coordinate system for both.
 - Pure renames must remain silent in added-line mode unless content hunks exist. Added/copied files are full new-file scope and deleted files are full old-file resolution scope.
+- GitHub Action values must enter through environment variables and validated argument arrays, never through shell interpolation.
+- Action-controlled paths must remain beneath `GITHUB_WORKSPACE`; stale reports must be deleted before execution.
+- Workflow annotations, job summaries, and generated SARIF must never contain scanner preview evidence.
+- Recommended pull-request workflows must remain read-only and must not use `pull_request_target` for untrusted code.
 
 Verification:
 
@@ -24,5 +28,6 @@ python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
 python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
 python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
+python -m unittest discover -s tests -p "test_github_action.py" -v
 python agent_system.py scan . --format json --fail-on high
 ```
