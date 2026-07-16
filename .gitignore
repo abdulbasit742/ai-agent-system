@@ -12,6 +12,12 @@ dist-admission/
 release-admission/
 dist-transition/
 release-transition/
+dist-trust-anchor/
+release-trust-anchor/
+dist-trust-candidate/
+release-trust-candidate/
+release-trust-state.json
+release-trust-state.json.lock
 .env
 .env.*
 !.env.example

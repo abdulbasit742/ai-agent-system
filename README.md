@@ -1,25 +1,24 @@
 # Basit Agent System
 
-A dependency-free AI agent control plane for repository scanning, command guarding, trace redaction, safe integration dispatch, and tamper-evident audit logs.
+A dependency-free AI agent control plane for repository scanning, command guarding, trace redaction, safe integration dispatch, tamper-evident audit logs, and offline software-supply-chain verification.
 
 ## Capabilities
 
 - repository, MCP, workflow, prompt, secret, and autonomy-boundary scanning
 - configurable rule packs with mandatory core protections
 - exact-fingerprint baselines and new-findings-only CI gates
-- Git-aware changed-file pull-request gates
-- added-line-only regression gates for low-noise reviews
-- first-party GitHub Action with annotations, job summaries, JSON, SARIF, and structured outputs
+- Git-aware changed-file and added-line pull-request gates
+- first-party GitHub Action with annotations, summaries, JSON, SARIF, and structured outputs
 - installable dependency-free Python package with reviewed wheel contents and console commands
-- reproducible release evidence with exact source identity, canonical manifests, and SHA-256 checksums
-- deterministic SPDX SBOMs and source-bound provenance statements
+- reproducible release bundles with exact source identity and SHA-256 checksums
+- deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
 - consumer release-admission policies and verified release-transition rollback gates
+- pinned, hash-chained consumer release trust states
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
-- text, JSON, and SARIF reports
 - dry-run-first integration dispatcher
-- hash-chained audit log verification
-- versioned suppression policies with mandatory ownership, justification, and expiration
+- hash-chained audit-log verification
+- versioned suppression policies with ownership, justification, and expiration
 
 ## Quick start
 
@@ -71,7 +70,7 @@ python scripts/validate_wheel.py dist/*.whl
 
 See [docs/python-distribution.md](docs/python-distribution.md), [docs/security-audit-python-distribution.md](docs/security-audit-python-distribution.md), and [CHANGELOG.md](CHANGELOG.md).
 
-## Reproducible release and supply-chain evidence
+## Reproducible releases and supply-chain evidence
 
 Build the same reviewed source twice with one deterministic source epoch:
 
@@ -82,7 +81,7 @@ python -m pip wheel . --no-deps --wheel-dir dist-two
 python scripts/release_bundle.py compare dist-one/*.whl dist-two/*.whl
 ```
 
-Create and verify a release evidence bundle:
+Create and verify a release bundle:
 
 ```bash
 python scripts/release_bundle.py create \
@@ -94,17 +93,17 @@ python scripts/release_bundle.py create \
 python scripts/release_bundle.py verify release
 ```
 
-For every wheel, a verified bundle contains the reviewed wheel, an SPDX 2.3 JSON SBOM, an unsigned in-toto/SLSA-style provenance statement, `release-manifest.json`, and `SHA256SUMS`. The manifest binds the exact source commit, deterministic epoch, wheel identity, evidence filenames, media types, sizes, digests, and canonical `release_id`.
+Each bundle contains the reviewed wheel, an SPDX 2.3 JSON SBOM, an unsigned in-toto Statement v1 with a SLSA provenance v1 predicate, `release-manifest.json`, and `SHA256SUMS`. The manifest binds the source commit, deterministic epoch, wheel identity, evidence filenames, media types, sizes, digests, and canonical `release_id`.
 
-Verification does not merely trust evidence hashes. It regenerates the expected SBOM and provenance from the validated wheel and source identity, so modified evidence still fails even when an attacker recalculates its hash, manifest release ID, and checksum file. Extra files, symlinks, checksum drift, metadata drift, source drift, or byte-different builds fail closed.
+Verification regenerates expected SBOM and provenance objects from the validated wheel. Modified evidence still fails even if its hash, manifest release ID, and checksum file are recalculated. Extra files, symlinks, checksum drift, metadata drift, source drift, or byte-different builds fail closed.
 
-The provenance statement is intentionally unsigned: it proves deterministic internal consistency but does not claim authenticated signer identity. CI uploads verified evidence only as a read-only workflow artifact. It does not publish to a package registry, create a GitHub Release, request OIDC credentials, read registry secrets, or use signing keys.
+The provenance is intentionally unsigned. It proves deterministic internal consistency but does not claim authenticated signer identity, transparency logging, or non-repudiation. CI creates read-only evidence artifacts; it does not publish packages, create releases, request OIDC credentials, read registry secrets, or use signing keys.
 
 See [docs/reproducible-releases.md](docs/reproducible-releases.md), [docs/supply-chain-evidence.md](docs/supply-chain-evidence.md), [docs/security-audit-reproducible-releases.md](docs/security-audit-reproducible-releases.md), and [docs/security-audit-supply-chain-evidence.md](docs/security-audit-supply-chain-evidence.md).
 
-## Release admission and transitions
+## Release admission
 
-Admission verifies whether one release bundle is acceptable under a consumer-owned policy:
+Admission decides whether one verified release is acceptable under a consumer-owned policy:
 
 ```bash
 python scripts/release_admission.py evaluate release \
@@ -114,7 +113,13 @@ python scripts/release_admission.py evaluate release \
   --format json
 ```
 
-A transition gate compares an independently retained trusted bundle with a candidate. Both bundles are fully verified before rollback, replay, same-version mutation, module hashes, commands, dependencies, and licenses are compared:
+The policy can constrain project identity, exact versions, source repository, artifact count and size, modules, console commands, runtime dependencies, licenses, checksums, SBOM fields, provenance type, builder workflow, build definition, and unsigned-evidence acceptance. Results use stable `ADMxxx` rules and distinct admitted (`0`), denied (`1`), and malformed or unverifiable (`2`) exits.
+
+See [docs/release-admission.md](docs/release-admission.md) and [docs/security-audit-release-admission.md](docs/security-audit-release-admission.md).
+
+## Verified release transitions
+
+A transition compares an independently retained trusted bundle with a candidate. Both bundles are fully verified before rollback, replay, same-version mutation, module hashes, commands, dependencies, and licenses are compared:
 
 ```bash
 python scripts/release_transition.py gate \
@@ -127,9 +132,53 @@ python scripts/release_transition.py gate \
   --format json
 ```
 
-Transition exit codes distinguish accepted (`0`), valid-but-denied (`1`), and malformed or unverifiable (`2`) outcomes. The default policy rejects exact replay, numeric version or source-epoch rollback, different bytes under one version, source-commit reuse, module or command removal, dependency increase, and license drift. Reports carry canonical policy and transition hashes with stable `TRNxxx` rules but never include module contents or credentials.
+The default policy rejects exact replay, numeric version or source-epoch rollback, different bytes under one version, source-commit reuse, module or command removal, dependency increase, and license drift. Reports carry canonical policy and transition hashes with stable `TRNxxx` rules but never include module contents or credentials.
 
-The caller chooses and protects the previous trust anchor. The tool never downloads or automatically selects it. See [docs/release-admission.md](docs/release-admission.md), [docs/release-transition.md](docs/release-transition.md), [docs/security-audit-release-admission.md](docs/security-audit-release-admission.md), and [docs/security-audit-release-transition.md](docs/security-audit-release-transition.md).
+The caller chooses and protects the previous trust anchor. The tool never downloads or automatically selects it. See [docs/release-transition.md](docs/release-transition.md) and [docs/security-audit-release-transition.md](docs/security-audit-release-transition.md).
+
+## Pinned release trust state
+
+A transition decision is temporary unless the accepted sequence is retained. `release_trust.py` stores that sequence in a canonical hash chain and requires the latest `state_id` to be retained through an independent trusted channel.
+
+Initialize one reviewed anchor:
+
+```bash
+python scripts/release_trust.py init \
+  release-trust-state.json \
+  trusted-release \
+  --expected-release-id "$TRUSTED_RELEASE_ID" \
+  --expected-source-commit "$TRUSTED_SOURCE_COMMIT" \
+  --expected-version "$TRUSTED_VERSION" \
+  --format json
+```
+
+Verify the state and its current release bundle:
+
+```bash
+python scripts/release_trust.py verify \
+  release-trust-state.json \
+  --expected-state-id "$EXPECTED_STATE_ID" \
+  --bundle trusted-release
+```
+
+Advance only through an accepted transition:
+
+```bash
+python scripts/release_trust.py advance \
+  release-trust-state.json \
+  trusted-release \
+  candidate-release \
+  --policy .release-transition.example.json \
+  --expected-state-id "$EXPECTED_STATE_ID" \
+  --expected-candidate-source-commit "$CANDIDATE_COMMIT" \
+  --expected-candidate-version "$CANDIDATE_VERSION" \
+  --expected-candidate-release-id "$CANDIDATE_RELEASE_ID" \
+  --format json
+```
+
+Each entry binds the release identity, previous entry hash, accepted transition ID, and transition-policy SHA-256. The whole file has a canonical `state_id`. Editing, truncation, duplicate release IDs, stale state pins, forked histories, non-canonical encoding, symlinks, or mismatched previous bundles fail closed. State writes use a persistent sidecar lock and same-directory atomic replacement.
+
+The state file alone does not prove freshness: consumers must protect the latest returned `state_id` separately. See [docs/release-trust-state.md](docs/release-trust-state.md) and [docs/security-audit-release-trust.md](docs/security-audit-release-trust.md).
 
 ## GitHub Action
 
@@ -159,13 +208,13 @@ jobs:
           annotations: true
 ```
 
-Replace the placeholder with a reviewed release or commit. The action defaults to the exact pull-request base and head commit SHAs, constrains all file inputs and outputs to `GITHUB_WORKSPACE`, removes stale reports before execution, and never places matched source previews in annotations, job summaries, or generated SARIF messages.
+The action defaults to the exact pull-request base and head commit SHAs, constrains file inputs and outputs to `GITHUB_WORKSPACE`, removes stale reports before execution, and never places matched source previews in annotations, summaries, or SARIF messages.
 
-Supported modes are `full`, `changed-files`, and `added-lines`. Outputs include status, finding counts, baseline counts, JSON report path, and SARIF path. See [docs/github-action.md](docs/github-action.md) and [examples/github-actions/security.yml.example](examples/github-actions/security.yml.example).
+Supported modes are `full`, `changed-files`, and `added-lines`. See [docs/github-action.md](docs/github-action.md) and [examples/github-actions/security.yml.example](examples/github-actions/security.yml.example).
 
-## Pull-request changed-file gates
+## Pull-request change gates
 
-Scan only files changed from a reviewed base reference to `HEAD`:
+Scan only files changed from a reviewed base reference:
 
 ```bash
 python agent_system.py scan . \
@@ -174,32 +223,7 @@ python agent_system.py scan . \
   --fail-on high
 ```
 
-Combine the Git scope with an existing baseline so only new findings in changed files fail:
-
-```bash
-python agent_system.py scan . \
-  --changed-from origin/main \
-  --new-only \
-  --format sarif \
-  --output agent-system.sarif
-```
-
-The system resolves refs to commit SHAs, calculates a merge-base diff, parses NUL-delimited paths, and fails closed for missing history, invalid refs, malformed output, or paths escaping the repository. Deleted and renamed paths participate in scoped baseline resolution without being read from disk.
-
-See [docs/changed-file-gating.md](docs/changed-file-gating.md).
-
-## Added-line-only gates
-
-For the lowest-noise pull-request gate, report only findings whose starting line was added or replaced:
-
-```bash
-python agent_changed_lines.py . \
-  --changed-from origin/main \
-  --format json \
-  --fail-on high
-```
-
-Use the same reviewed baseline while restricting both new findings and resolved findings to the changed line ranges:
+For the lowest-noise gate, report only findings beginning on added or replaced lines:
 
 ```bash
 python agent_changed_lines.py . \
@@ -210,90 +234,32 @@ python agent_changed_lines.py . \
   --output agent-system.sarif
 ```
 
-Added and copied files are scanned fully. Deleted files place all old findings in resolution scope. Modified files use separate old and new zero-context hunk ranges, so inserting safe lines before a legacy issue does not falsely reclassify it. A pure rename creates no added-line finding.
+Refs are resolved to commit SHAs, merge-base diffs use NUL-delimited paths, and paths are constrained to the repository. Deleted and renamed paths participate in scoped baseline resolution. Added-line mode uses separate old and new hunk coordinates so safe line shifts do not reclassify legacy findings.
 
-See [docs/added-line-gating.md](docs/added-line-gating.md).
+See [docs/changed-file-gating.md](docs/changed-file-gating.md) and [docs/added-line-gating.md](docs/added-line-gating.md).
 
-## Baseline adoption for existing repositories
-
-Review current findings and create an exact-fingerprint baseline:
+## Baseline adoption
 
 ```bash
 python agent_system.py scan . --format json
 python agent_system.py baseline --create --scan-path .
-```
-
-Then fail CI only when a new finding is introduced:
-
-```bash
 python agent_system.py scan . --new-only --format json --fail-on high
 ```
 
-The scanner automatically discovers `.agent-system-baseline.json`. Use `--show-existing` to include existing and resolved entries in JSON or text reports. SARIF baseline mode contains only new findings.
+Baselines contain no secret previews or source evidence. They carry an integrity hash and are bound to active rule-pack and suppression controls. Changed controls, malformed files, or manual edits fail closed. See [docs/baseline-gating.md](docs/baseline-gating.md).
 
-Baselines contain no secret previews or source evidence. They carry an integrity hash and are bound to the active rule-pack and suppression controls. Changed controls, malformed files, or manual edits fail closed.
-
-See [docs/baseline-gating.md](docs/baseline-gating.md).
-
-## Rule-pack configuration
-
-Create a project configuration:
+## Configuration and suppressions
 
 ```bash
 python agent_system.py config --init
-```
-
-Validate it:
-
-```bash
 python agent_system.py config .agent-system.json
-```
-
-The scanner automatically discovers `.agent-system.json` in the scanned project root. An explicit configuration can be supplied with:
-
-```bash
-python agent_system.py scan . --config policies/backend.json
-```
-
-Available packs:
-
-- `core`: sensitive artifacts, private keys, credentials, and provider tokens
-- `boundaries`: authentication, permissions, shell execution, dynamic execution, and approval bypasses
-- `workflows`: GitHub Actions permission, trigger, runner, remote-script, and action-pin checks
-
-The `core` pack and its rules cannot be disabled. Unknown packs and rule IDs fail closed. Optional packs can be omitted, and individual non-core rules can be listed in `disabled_rules`.
-
-See [docs/rule-pack-configuration.md](docs/rule-pack-configuration.md) and [.agent-system.example.json](.agent-system.example.json).
-
-## Reviewed suppression policies
-
-Create a policy template:
-
-```bash
 python agent_system.py policy --init
-```
-
-Validate it:
-
-```bash
 python agent_system.py policy .agent-system-policy.json
 ```
 
-Scan with automatic policy discovery:
+The mandatory `core` pack and rules `BAS000` through `BAS003` cannot be disabled. Suppressions require a unique ID, owner, meaningful reason, and ISO expiration date. Expired suppressions never hide findings and make validation fail.
 
-```bash
-python agent_system.py scan . --format json --show-suppressed
-```
-
-Or pass an explicit path:
-
-```bash
-python agent_system.py scan . --policy policies/repository.json
-```
-
-Each suppression must have a unique `id`, `owner`, meaningful `reason`, and ISO `expires` date. It may match by `rule_id`, path glob, and optional exact fingerprint. Expired suppressions never hide findings and make validation fail.
-
-See [docs/policy-suppressions.md](docs/policy-suppressions.md) and [.agent-system-policy.example.json](.agent-system-policy.example.json).
+See [docs/rule-pack-configuration.md](docs/rule-pack-configuration.md), [.agent-system.example.json](.agent-system.example.json), [docs/policy-suppressions.md](docs/policy-suppressions.md), and [.agent-system-policy.example.json](.agent-system-policy.example.json).
 
 ## Safe dispatch
 
@@ -308,7 +274,7 @@ The social integration is fixed to `npm run dry-run`; the root dispatcher does n
 
 ## Numbered development workflow
 
-Development is tracked as an ordered 1-to-400 sequence. Every number must preserve working features, add tests, run the documented verification commands, and update [development-progress.json](development-progress.json). See [docs/NUMBERED_WORKFLOW.md](docs/NUMBERED_WORKFLOW.md).
+Development is tracked as an ordered 1-to-400 sequence. Every number must preserve working features, add tests, run verification, and update [development-progress.json](development-progress.json). See [docs/NUMBERED_WORKFLOW.md](docs/NUMBERED_WORKFLOW.md).
 
 ## License boundary
 
@@ -330,6 +296,7 @@ python -m unittest discover -s tests -p "test_release_bundle.py" -v
 python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m unittest discover -s tests -p "test_release_admission.py" -v
 python -m unittest discover -s tests -p "test_release_transition.py" -v
+python -m unittest discover -s tests -p "test_release_trust.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"

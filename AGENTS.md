@@ -38,7 +38,11 @@
 - Transition gates must fully verify both bundles before comparison and must bind the previous release ID plus candidate commit/version before authorization.
 - Numeric rollback, exact replay, same-version mutation, source epoch/commit reuse, module/command removal, dependency increase, and license drift must remain explicit `TRNxxx` controls.
 - Transition reports may contain identities, hashes, filenames, commands, counts, and license IDs, but never source contents, scanner previews, credentials, or environment secrets.
-- Ordinary CI may build, verify, admit, compare, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Release trust states are consumer-owned, canonical, hash-chained files and must never be embedded in release bundles or committed as generated repository source.
+- Every trust-state verify or advance must require the latest externally retained `state_id`; an internally valid state without that pin is not rollback or fork protection.
+- Trust-state mutation must verify both bundles, require the previous bundle to equal the current head, reject duplicate release IDs, and append only accepted transition IDs and policy hashes.
+- Trust-state writes must remain symlink-safe, lock-coordinated, same-directory atomic replacements; denied or stale-pin operations must leave state bytes unchanged.
+- Ordinary CI may build, verify, admit, compare, exercise temporary trust states, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
@@ -58,6 +62,7 @@ python -m unittest discover -s tests -p "test_release_bundle.py" -v
 python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m unittest discover -s tests -p "test_release_admission.py" -v
 python -m unittest discover -s tests -p "test_release_transition.py" -v
+python -m unittest discover -s tests -p "test_release_trust.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"

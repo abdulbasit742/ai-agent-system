@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 10,
-    "next_expected": 11
+    "latest_completed": 11,
+    "next_expected": 12
   },
   "completed": [
     {
@@ -192,6 +192,27 @@
         "module_command_dependency_and_license_diff": "passed",
         "transition_exit_semantics": "passed",
         "read_only_transition_ci": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 11,
+      "title": "Pinned tamper-evident release trust state",
+      "status": "completed",
+      "summary": "Added a consumer-owned canonical hash-chain state with externally retained state IDs, exact anchor and bundle-head binding, accepted-transition recording, duplicate-release prevention, lock-coordinated atomic updates, and stale/fork/tamper rejection.",
+      "verification": {
+        "unit_tests": 162,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "canonical_state_and_entry_hashes": "passed",
+        "external_state_id_rollback_pin": "passed",
+        "anchor_and_bundle_head_binding": "passed",
+        "accepted_transition_chain": "passed",
+        "duplicate_release_and_denied_transition_rejection": "passed",
+        "atomic_lock_coordinated_updates": "passed",
+        "stale_pin_and_tampered_history_rejection": "passed",
+        "read_only_trust_state_ci": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

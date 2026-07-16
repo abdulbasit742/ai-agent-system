@@ -1,0 +1,184 @@
+name: release-trust
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  trust-state:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Test release trust state
+        run: python -m unittest discover -s tests -p "test_release_trust.py" -v
+      - name: Build verified anchor release
+        id: anchor
+        run: |
+          EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH="$EPOCH"
+          python -m pip wheel . --no-deps --wheel-dir dist-trust-anchor
+          python scripts/release_bundle.py create \
+            --wheel dist-trust-anchor/*.whl \
+            --output-dir release-trust-anchor \
+            --source-commit "$GITHUB_SHA" \
+            --source-date-epoch "$EPOCH"
+          python scripts/release_bundle.py verify release-trust-anchor
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          from agent_version import __version__
+
+          manifest = json.loads(Path('release-trust-anchor/release-manifest.json').read_text())
+          print(f"release_id={manifest['release_id']}")
+          print(f"version={__version__}")
+          print(f"epoch={manifest['source']['source_date_epoch']}")
+          PY
+      - name: Initialize and verify pinned trust state
+        id: state
+        env:
+          ANCHOR_RELEASE_ID: ${{ steps.anchor.outputs.release_id }}
+          ANCHOR_VERSION: ${{ steps.anchor.outputs.version }}
+        run: |
+          python scripts/release_trust.py init \
+            "$RUNNER_TEMP/release-trust-state.json" \
+            release-trust-anchor \
+            --expected-release-id "$ANCHOR_RELEASE_ID" \
+            --expected-source-commit "$GITHUB_SHA" \
+            --expected-version "$ANCHOR_VERSION" \
+            --format json > "$RUNNER_TEMP/trust-init.json"
+          STATE_ID="$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          print(json.loads(Path(os.environ['RUNNER_TEMP'], 'trust-init.json').read_text())['state_id'])
+          PY
+          )"
+          echo "state_id=$STATE_ID" >> "$GITHUB_OUTPUT"
+          python scripts/release_trust.py verify \
+            "$RUNNER_TEMP/release-trust-state.json" \
+            --expected-state-id "$STATE_ID" \
+            --bundle release-trust-anchor
+      - name: Build a distinct verified candidate
+        id: candidate
+        env:
+          ANCHOR_EPOCH: ${{ steps.anchor.outputs.epoch }}
+        run: |
+          CANDIDATE_ROOT="$RUNNER_TEMP/candidate-source"
+          cp -a . "$CANDIDATE_ROOT"
+          rm -rf \
+            "$CANDIDATE_ROOT/.git" \
+            "$CANDIDATE_ROOT/dist-trust-anchor" \
+            "$CANDIDATE_ROOT/release-trust-anchor"
+          printf '\n# release-trust candidate marker\n' >> "$CANDIDATE_ROOT/agent_system.py"
+          CANDIDATE_EPOCH="$((ANCHOR_EPOCH + 1))"
+          CANDIDATE_COMMIT="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          export SOURCE_DATE_EPOCH="$CANDIDATE_EPOCH"
+          (
+            cd "$CANDIDATE_ROOT"
+            python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/dist-trust-candidate"
+            python scripts/release_bundle.py create \
+              --wheel "$RUNNER_TEMP"/dist-trust-candidate/*.whl \
+              --output-dir "$RUNNER_TEMP/release-trust-candidate" \
+              --source-commit "$CANDIDATE_COMMIT" \
+              --source-date-epoch "$CANDIDATE_EPOCH"
+            python scripts/release_bundle.py verify "$RUNNER_TEMP/release-trust-candidate"
+          )
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads(Path(os.environ['RUNNER_TEMP'], 'release-trust-candidate', 'release-manifest.json').read_text())
+          print(f"release_id={manifest['release_id']}")
+          print(f"version={manifest['version']}")
+          print("commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+          PY
+      - name: Advance trust state with explicit same-version approval
+        id: advance
+        env:
+          STATE_ID: ${{ steps.state.outputs.state_id }}
+          CANDIDATE_RELEASE_ID: ${{ steps.candidate.outputs.release_id }}
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+          CANDIDATE_COMMIT: ${{ steps.candidate.outputs.commit }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          policy = json.loads(Path('.release-transition.example.json').read_text())
+          policy['identity']['allow_same_version_mutation'] = True
+          Path(os.environ['RUNNER_TEMP'], 'trust-transition-policy.json').write_text(
+              json.dumps(policy, sort_keys=True, indent=2) + '\n'
+          )
+          PY
+          python scripts/release_trust.py advance \
+            "$RUNNER_TEMP/release-trust-state.json" \
+            release-trust-anchor \
+            "$RUNNER_TEMP/release-trust-candidate" \
+            --policy "$RUNNER_TEMP/trust-transition-policy.json" \
+            --expected-state-id "$STATE_ID" \
+            --expected-candidate-source-commit "$CANDIDATE_COMMIT" \
+            --expected-candidate-version "$CANDIDATE_VERSION" \
+            --expected-candidate-release-id "$CANDIDATE_RELEASE_ID" \
+            --format json > "$RUNNER_TEMP/trust-advance.json"
+          NEW_STATE_ID="$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          print(json.loads(Path(os.environ['RUNNER_TEMP'], 'trust-advance.json').read_text())['state_id'])
+          PY
+          )"
+          echo "state_id=$NEW_STATE_ID" >> "$GITHUB_OUTPUT"
+          python scripts/release_trust.py verify \
+            "$RUNNER_TEMP/release-trust-state.json" \
+            --expected-state-id "$NEW_STATE_ID" \
+            --bundle "$RUNNER_TEMP/release-trust-candidate"
+      - name: Reject stale pins and tampered history
+        env:
+          OLD_STATE_ID: ${{ steps.state.outputs.state_id }}
+          NEW_STATE_ID: ${{ steps.advance.outputs.state_id }}
+        run: |
+          set +e
+          python scripts/release_trust.py verify \
+            "$RUNNER_TEMP/release-trust-state.json" \
+            --expected-state-id "$OLD_STATE_ID" \
+            > "$RUNNER_TEMP/stale-state.txt" 2>&1
+          STALE_STATUS=$?
+          set -e
+          test "$STALE_STATUS" -eq 2
+
+          cp "$RUNNER_TEMP/release-trust-state.json" "$RUNNER_TEMP/tampered-trust-state.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['RUNNER_TEMP'], 'tampered-trust-state.json')
+          state = json.loads(path.read_text())
+          state['entries'][0]['release']['source_commit'] = 'cccccccccccccccccccccccccccccccccccccccc'
+          path.write_text(json.dumps(state, sort_keys=True, indent=2) + '\n')
+          PY
+          set +e
+          python scripts/release_trust.py verify \
+            "$RUNNER_TEMP/tampered-trust-state.json" \
+            --expected-state-id "$NEW_STATE_ID" \
+            > "$RUNNER_TEMP/tampered-state.txt" 2>&1
+          TAMPER_STATUS=$?
+          set -e
+          test "$TAMPER_STATUS" -eq 2
+      - name: Preserve trust-state evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-trust-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/release-trust-state.json
+            ${{ runner.temp }}/trust-init.json
+            ${{ runner.temp }}/trust-advance.json
+          if-no-files-found: error
