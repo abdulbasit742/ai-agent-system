@@ -10,8 +10,10 @@ from email.parser import Parser
 from pathlib import Path
 from typing import Any
 
+from agent_version import __version__
+
 EXPECTED_NAME = "basit-agent-system"
-EXPECTED_VERSION = "0.1.0"
+EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
     "agent_baseline.py",
     "agent_changed_lines.py",
