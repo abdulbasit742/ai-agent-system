@@ -41,6 +41,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_agent_git_lines.py" -v
       - name: Test added-line security gate
         run: python -m unittest discover -s tests -p "test_added_line_gate.py" -v
+      - name: Test GitHub Action runner
+        run: python -m unittest discover -s tests -p "test_github_action.py" -v
       - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
@@ -49,3 +51,35 @@ jobs:
       - run: python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
       - run: python agent_system.py scan . --format json --fail-on high
       - run: python agent_system.py guard python -m unittest discover -s tests
+
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run local composite action
+        id: basit
+        uses: ./
+        with:
+          mode: full
+          annotations: false
+          report-path: .agent-system/action-smoke.json
+          sarif-path: .agent-system/action-smoke.sarif
+      - name: Validate action outputs and reports
+        env:
+          FINDING_COUNT: ${{ steps.basit.outputs.finding-count }}
+          ACTION_STATUS: ${{ steps.basit.outputs.status }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path('.agent-system/action-smoke.json').read_text())
+          sarif = json.loads(Path('.agent-system/action-smoke.sarif').read_text())
+          assert os.environ['ACTION_STATUS'] == 'passed'
+          assert int(os.environ['FINDING_COUNT']) == len(report['findings']) == 0
+          assert sarif['version'] == '2.1.0'
+          assert sarif['runs'][0]['results'] == []
+          PY
