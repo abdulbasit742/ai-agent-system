@@ -1,32 +1,36 @@
 {
-  "version": 4,
+  "version": 5,
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 36,
-    "next_expected": 37
+    "latest_completed": 37,
+    "next_expected": 38
   },
   "prior_history": {
     "start": 1,
-    "end": 35,
-    "repository_commit": "b478d8750e2d884fff4095ed2ff9cd98a55047cf",
+    "end": 36,
+    "repository_commit": "d05691b1637bec7a4dbf5cd5945b2de9aa97b53c",
     "path": "development-progress.json"
   },
   "completed": [
     {
-      "number": 36,
-      "title": "Consumer receiver-acceptance bundle admission",
+      "number": 37,
+      "title": "Pinned receiver-acceptance trust state",
       "status": "completed",
-      "summary": "Consumer-owned policies verify receiver-acceptance checkpoint bundles before applying acceptance, receiver, trust, proof-selection, and transition controls.",
+      "summary": "Added a consumer-owned canonical trust state that anchors admitted receiver-acceptance snapshot bundles and atomically advances through admitted transitions with exact outer acceptance, nested receiver, and nested trust-head binding, replay protection, external freshness pins, and immutable denial behavior.",
       "verification": {
-        "unit_tests": 665,
+        "unit_tests": 685,
         "python_versions": ["3.11", "3.12"],
-        "snapshot_and_transition_admission": "passed",
-        "canonical_policy_and_decision_ids": "passed",
-        "policy_and_manifest_boundary_controls": "passed",
+        "snapshot_anchor_and_transition_advance": "passed",
+        "canonical_hash_chained_state": "passed",
+        "outer_acceptance_and_nested_receiver_trust_binding": "passed",
+        "external_state_pin": "passed",
+        "replay_rollback_and_nonadvancing_rejection": "passed",
+        "denied_and_invalid_byte_immutability": "passed",
+        "mode_0600_atomic_locked_updates": "passed",
         "installed_aliases": "passed",
-        "dependency_free_modules": 33,
-        "installed_commands": 46,
+        "dependency_free_modules": 34,
+        "installed_commands": 48,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
