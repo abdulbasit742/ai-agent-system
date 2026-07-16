@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 8,
-    "next_expected": 9
+    "latest_completed": 9,
+    "next_expected": 10
   },
   "completed": [
     {
@@ -152,6 +152,26 @@
         "tampered_sbom_and_provenance_rejection": "passed",
         "release_readiness_supply_chain_validation": "passed",
         "read_only_unsigned_evidence_boundary": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 9,
+      "title": "Consumer release-admission policy",
+      "status": "completed",
+      "summary": "Added a versioned offline consumer policy gate that verifies a release bundle first, then admits or denies it using exact source identity, artifact, module, command, dependency, license, checksum, SBOM, provenance, and unsigned-evidence constraints.",
+      "verification": {
+        "unit_tests": 124,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "policy_schema_and_hash": "passed",
+        "exact_commit_version_and_release_id_binding": "passed",
+        "artifact_module_and_command_constraints": "passed",
+        "license_and_checksum_constraints": "passed",
+        "sbom_and_provenance_constraints": "passed",
+        "admit_deny_invalid_exit_semantics": "passed",
+        "read_only_admission_ci": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
