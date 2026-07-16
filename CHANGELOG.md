@@ -61,8 +61,12 @@ All notable public distribution changes are recorded here.
 - exact bundle-type, size, proof-count, sealed-evidence, candidate-generation, segment-selection, consistency-relation, predecessor, and generation-delta constraints
 - canonical policy SHA-256, deterministic decision IDs, and stable `AUA001` through `AUA016` denials
 - separate admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) audit-bundle outcomes
-- installed audit-bundle and admission aliases, a reviewed seventeen-module/sixteen-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- consumer-owned audit bundle trust states with snapshot-only anchors, transition-only advancement, and externally retained `state_id` freshness pins
+- domain-separated entry/state hashes binding bundle, checkpoint, catalog, generation, segment count, Merkle root, admission decision, policy hash, and transition delta
+- stale-pin, replay, duplicate identity, head mismatch, non-increasing generation, symlink, lock, tamper, and overwrite rejection with stable `ATS001` through `ATS010` diagnostics
+- advisory-lock-coordinated mode-0600 atomic trust-state updates that preserve bytes on denials and invalid operations
+- installed audit-bundle, admission, and trust aliases, a reviewed eighteen-module/eighteen-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
