@@ -13,6 +13,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - installable dependency-free Python package with reviewed wheel contents and console commands
 - reproducible release evidence with exact source identity, canonical manifests, and SHA-256 checksums
 - deterministic SPDX SBOMs and source-bound provenance statements
+- consumer release-admission policies and verified release-transition rollback gates
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -100,6 +101,35 @@ Verification does not merely trust evidence hashes. It regenerates the expected 
 The provenance statement is intentionally unsigned: it proves deterministic internal consistency but does not claim authenticated signer identity. CI uploads verified evidence only as a read-only workflow artifact. It does not publish to a package registry, create a GitHub Release, request OIDC credentials, read registry secrets, or use signing keys.
 
 See [docs/reproducible-releases.md](docs/reproducible-releases.md), [docs/supply-chain-evidence.md](docs/supply-chain-evidence.md), [docs/security-audit-reproducible-releases.md](docs/security-audit-reproducible-releases.md), and [docs/security-audit-supply-chain-evidence.md](docs/security-audit-supply-chain-evidence.md).
+
+## Release admission and transitions
+
+Admission verifies whether one release bundle is acceptable under a consumer-owned policy:
+
+```bash
+python scripts/release_admission.py evaluate release \
+  --policy .release-admission.example.json \
+  --expected-source-commit "$(git rev-parse HEAD)" \
+  --expected-version "0.1.0" \
+  --format json
+```
+
+A transition gate compares an independently retained trusted bundle with a candidate. Both bundles are fully verified before rollback, replay, same-version mutation, module hashes, commands, dependencies, and licenses are compared:
+
+```bash
+python scripts/release_transition.py gate \
+  trusted-release candidate-release \
+  --policy .release-transition.example.json \
+  --expected-previous-release-id "$TRUSTED_RELEASE_ID" \
+  --expected-candidate-source-commit "$CANDIDATE_COMMIT" \
+  --expected-candidate-version "$CANDIDATE_VERSION" \
+  --expected-candidate-release-id "$CANDIDATE_RELEASE_ID" \
+  --format json
+```
+
+Transition exit codes distinguish accepted (`0`), valid-but-denied (`1`), and malformed or unverifiable (`2`) outcomes. The default policy rejects exact replay, numeric version or source-epoch rollback, different bytes under one version, source-commit reuse, module or command removal, dependency increase, and license drift. Reports carry canonical policy and transition hashes with stable `TRNxxx` rules but never include module contents or credentials.
+
+The caller chooses and protects the previous trust anchor. The tool never downloads or automatically selects it. See [docs/release-admission.md](docs/release-admission.md), [docs/release-transition.md](docs/release-transition.md), [docs/security-audit-release-admission.md](docs/security-audit-release-admission.md), and [docs/security-audit-release-transition.md](docs/security-audit-release-transition.md).
 
 ## GitHub Action
 
@@ -298,10 +328,14 @@ python -m unittest discover -s tests -p "test_github_action.py" -v
 python -m unittest discover -s tests -p "test_packaging.py" -v
 python -m unittest discover -s tests -p "test_release_bundle.py" -v
 python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
+python -m unittest discover -s tests -p "test_release_admission.py" -v
+python -m unittest discover -s tests -p "test_release_transition.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
 python scripts/release_bundle.py verify release
+python scripts/release_admission.py evaluate release --policy .release-admission.example.json --expected-source-commit "$(git rev-parse HEAD)" --expected-version "0.1.0"
+python scripts/release_transition.py policy .release-transition.example.json
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```

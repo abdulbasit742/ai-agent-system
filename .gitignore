@@ -10,6 +10,8 @@ dist-one/
 dist-two/
 dist-admission/
 release-admission/
+dist-transition/
+release-transition/
 .env
 .env.*
 !.env.example

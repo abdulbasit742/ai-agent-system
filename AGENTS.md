@@ -34,7 +34,11 @@
 - Admission must verify the complete bundle before applying policy and must distinguish policy denial (`1`) from malformed or unverifiable input (`2`).
 - Admission reports must include the canonical policy SHA-256 and stable `ADMxxx` rules without source previews or environment secrets.
 - Exact expected source commit and version are mandatory for admission; an expected release ID should be supplied when one reviewed manifest is known.
-- Ordinary CI may build, verify, admit, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Release-transition policies and trusted previous bundles are consumer-owned inputs; never choose a previous trust anchor automatically or load policy from either bundle.
+- Transition gates must fully verify both bundles before comparison and must bind the previous release ID plus candidate commit/version before authorization.
+- Numeric rollback, exact replay, same-version mutation, source epoch/commit reuse, module/command removal, dependency increase, and license drift must remain explicit `TRNxxx` controls.
+- Transition reports may contain identities, hashes, filenames, commands, counts, and license IDs, but never source contents, scanner previews, credentials, or environment secrets.
+- Ordinary CI may build, verify, admit, compare, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
@@ -53,10 +57,12 @@ python -m unittest discover -s tests -p "test_wheel_validator.py" -v
 python -m unittest discover -s tests -p "test_release_bundle.py" -v
 python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m unittest discover -s tests -p "test_release_admission.py" -v
+python -m unittest discover -s tests -p "test_release_transition.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
 python scripts/release_bundle.py verify release
 python scripts/release_admission.py evaluate release --policy .release-admission.example.json --expected-source-commit "$(git rev-parse HEAD)" --expected-version "0.1.0"
+python scripts/release_transition.py policy .release-transition.example.json
 python agent_system.py scan . --format json --fail-on high
 ```
