@@ -160,3 +160,64 @@ jobs:
           name: basit-agent-system-audit-catalog-checkpoint-${{ github.sha }}
           path: ${{ runner.temp }}/audit-catalog-checkpoint/
           if-no-files-found: error
+
+  checkpoint-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise checkpoint aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/checkpoint-venv"
+          BIN="$RUNNER_TEMP/checkpoint-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-checkpoint"
+          ARCHIVE="$ROOT/segments"
+          ACTIVE="$ROOT/active.jsonl"
+          CATALOG="$ARCHIVE/catalog.json"
+          CHECKPOINT="$ROOT/checkpoint.json"
+          PROOF="$ROOT/proof.json"
+          mkdir -p "$ARCHIVE" "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/basit-agent" --audit-log "$ACTIVE" scan "$GITHUB_WORKSPACE" \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          "$BIN/basit-agent-segments" rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/segment-one" --format json > "$ROOT/rotate.json"
+          "$BIN/basit-agent-catalog" init "$CATALOG" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog-report.json"
+          CATALOG_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-report.json")
+          "$BIN/basit-agent-catalog-checkpoint" create "$CATALOG" "$CHECKPOINT" \
+            --expected-catalog-id "$CATALOG_ID" --active "$ACTIVE" --format json \
+            > "$ROOT/checkpoint-report.json"
+          CHECKPOINT_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/checkpoint-report.json")
+          "$BIN/basit-agent-catalog-checkpoint" prove "$CATALOG" "$CHECKPOINT" "$PROOF" \
+            --expected-catalog-id "$CATALOG_ID" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" --active "$ACTIVE" \
+            --segment-index 1 --format json > "$ROOT/proof-report.json"
+          "$BIN/agent-audit-catalog-checkpoint" verify-proof "$PROOF" "$CHECKPOINT" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --segment-dir "$ARCHIVE/segment-one" --format json > "$ROOT/verify.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'installed-checkpoint'
+          report = json.loads((root / 'verify.json').read_text())
+          assert report['valid'] is True
+          assert report['segment_verified'] is True
+          assert report['entry']['segment_index'] == 1
+          PY
