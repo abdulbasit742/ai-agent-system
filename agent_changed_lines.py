@@ -63,6 +63,14 @@ def _scope_summary(scope: dict[str, Any]) -> dict[str, Any]:
     return {key: scope[key] for key in keys if key in scope}
 
 
+def _audit_scope(scope: dict[str, Any]) -> dict[str, Any]:
+    """Return typed audit metadata without changing the public report contract."""
+    normalized = _scope_summary(scope)
+    if normalized.get("line_mode") == "added-lines":
+        normalized["line_mode"] = True
+    return normalized
+
+
 def _render(
     findings: list[dict[str, Any]],
     suppressed: list[dict[str, Any]],
@@ -213,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         "new": len(reported) if baseline else None,
         "existing": len(existing) if baseline else None,
         "resolved": len(resolved) if baseline else None,
-        "scope": _scope_summary(report_scope),
+        "scope": _audit_scope(report_scope),
     })
     threshold_failed = any(
         core.SEVERITY[item["severity"]] >= core.SEVERITY[args.fail_on]
