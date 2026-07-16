@@ -18,9 +18,12 @@ from agent_audit import (
 )
 from agent_system_legacy import *  # noqa: F401,F403
 
-# Keep the public compatibility API while replacing the legacy audit implementation.
+# Keep the public and internal compatibility API while replacing only audit handling.
 append_audit = _strict_append_audit
 verify_audit = _strict_verify_audit
+_load_controls = _legacy._load_controls
+_baseline_for_scope = _legacy._baseline_for_scope
+_scope_summary = _legacy._scope_summary
 _legacy.append_audit = append_audit
 _legacy.verify_audit = verify_audit
 
