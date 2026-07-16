@@ -23,6 +23,8 @@ class AuditTrustReceiverAcceptanceConsistencyError(ValueError):
         super().__init__(message)
         if isinstance(rule_id, str) and rule_id.startswith("ARR") and len(rule_id) == 6:
             rule_id = RULE_PREFIX + rule_id[3:]
+        if isinstance(rule_id, str) and rule_id.startswith("ATK") and len(rule_id) == 6:
+            rule_id = RULE_PREFIX + rule_id[3:]
         self.rule_id = rule_id
         self.denied = denied
 
@@ -41,7 +43,7 @@ class AuditTrustReceiverAcceptanceConsistencyDenied(
 def _load_isolated_core() -> ModuleType:
     source = Path(__file__).with_name("agent_audit_trust_receiver_consistency.py")
     spec = importlib.util.spec_from_file_location(
-        "_agent_audit_trust_receiver_acceptance_consistency_core", source
+        "_agent_audit_trust_receiver_acceptance_consistency_adapter", source
     )
     if spec is None or spec.loader is None:
         raise AuditTrustReceiverAcceptanceConsistencyError(
@@ -54,6 +56,8 @@ def _load_isolated_core() -> ModuleType:
 
 def _identifier(domain: bytes, payload: dict[str, Any]) -> str:
     mapped = {
+        b"audit-trust-consistency-proof-v1": PROOF_DOMAIN,
+        b"audit-trust-consistency-decision-v1": DECISION_DOMAIN,
         b"audit-trust-receiver-consistency-proof-v1": PROOF_DOMAIN,
         b"audit-trust-receiver-consistency-decision-v1": DECISION_DOMAIN,
     }.get(domain, domain)
@@ -75,11 +79,11 @@ def _denial_report(
         ),
     }
     core = {
-        "consistency_version": _core.CONSISTENCY_VERSION,
+        "consistency_version": _engine.CONSISTENCY_VERSION,
         "accepted": False,
         "relation": relation,
-        "previous": _core._checkpoint_reference(previous_checkpoint),
-        "candidate": _core._checkpoint_reference(candidate_checkpoint),
+        "previous": _engine._checkpoint_reference(previous_checkpoint),
+        "candidate": _engine._checkpoint_reference(candidate_checkpoint),
         "common": relation_report["common"],
         "violations": [violation],
     }
@@ -174,45 +178,48 @@ def _validate_boundary(
     return entry
 
 
-_core = _load_isolated_core()
-_core.__doc__ = __doc__
-_core.AuditTrustReceiverError = acceptance.AuditTrustReceiverAcceptanceError
-_core.AuditTrustReceiverCheckpointError = checkpoint.AuditTrustReceiverAcceptanceCheckpointError
-_core.AuditTrustReceiverConsistencyError = AuditTrustReceiverAcceptanceConsistencyError
-_core.AuditTrustReceiverConsistencyDenied = AuditTrustReceiverAcceptanceConsistencyDenied
-_core.canonical_json = acceptance.canonical_json
-_core.load_state = acceptance.load_state
-_core.validate_state = acceptance.validate_state
-_core.MERKLE_ALGORITHM = checkpoint.MERKLE_ALGORITHM
-_core._entry = checkpoint._core._entry
-_core._head = checkpoint._head
-_core._leaf_hash = checkpoint._core._leaf_hash
-_core._merkle_root = checkpoint._core._merkle_root
-_core._node_hash = checkpoint._core._node_hash
-_core.checkpoint_matches_state = checkpoint.checkpoint_matches_state
-_core.lineage = checkpoint.lineage
-_core.load_checkpoint = checkpoint.load_checkpoint
-_core.validate_checkpoint = checkpoint.validate_checkpoint
-_core._identifier = _identifier
-_core._denial_report = _denial_report
-_core._validate_boundary = _validate_boundary
+# The receiver adapter itself wraps the generic compact-range engine. Bind the
+# nested engine directly so executable function globals use acceptance schemas.
+_adapter = _load_isolated_core()
+_engine = _adapter._core
+_engine.__doc__ = __doc__
+_engine.AuditBundleTrustError = acceptance.AuditTrustReceiverAcceptanceError
+_engine.AuditTrustCheckpointError = checkpoint.AuditTrustReceiverAcceptanceCheckpointError
+_engine.AuditTrustConsistencyError = AuditTrustReceiverAcceptanceConsistencyError
+_engine.AuditTrustConsistencyDenied = AuditTrustReceiverAcceptanceConsistencyDenied
+_engine.canonical_json = acceptance.canonical_json
+_engine.load_state = acceptance.load_state
+_engine.validate_state = acceptance.validate_state
+_engine.MERKLE_ALGORITHM = checkpoint.MERKLE_ALGORITHM
+_engine._entry = checkpoint._core._entry
+_engine._head = checkpoint._head
+_engine._leaf_hash = checkpoint._core._leaf_hash
+_engine._merkle_root = checkpoint._core._merkle_root
+_engine._node_hash = checkpoint._core._node_hash
+_engine.checkpoint_matches_state = checkpoint.checkpoint_matches_state
+_engine.lineage = checkpoint.lineage
+_engine.load_checkpoint = checkpoint.load_checkpoint
+_engine.validate_checkpoint = checkpoint.validate_checkpoint
+_engine._identifier = _identifier
+_engine._denial_report = _denial_report
+_engine._validate_boundary = _validate_boundary
 
-CONSISTENCY_VERSION = _core.CONSISTENCY_VERSION
-CONSISTENCY_ALGORITHM = _core.CONSISTENCY_ALGORITHM
-MAX_CONSISTENCY_BYTES = _core.MAX_CONSISTENCY_BYTES
-MAX_FRONTIER_SEGMENTS = _core.MAX_FRONTIER_SEGMENTS
-CONSISTENCY_FIELDS = _core.CONSISTENCY_FIELDS
-CHECKPOINT_REFERENCE_FIELDS = _core.CHECKPOINT_REFERENCE_FIELDS
-FRONTIER_FIELDS = _core.FRONTIER_FIELDS
+CONSISTENCY_VERSION = _engine.CONSISTENCY_VERSION
+CONSISTENCY_ALGORITHM = _engine.CONSISTENCY_ALGORITHM
+MAX_CONSISTENCY_BYTES = _engine.MAX_CONSISTENCY_BYTES
+MAX_FRONTIER_SEGMENTS = _engine.MAX_FRONTIER_SEGMENTS
+CONSISTENCY_FIELDS = _engine.CONSISTENCY_FIELDS
+CHECKPOINT_REFERENCE_FIELDS = _engine.CHECKPOINT_REFERENCE_FIELDS
+FRONTIER_FIELDS = _engine.FRONTIER_FIELDS
 
-range_layout = _core.range_layout
-append_layout = _core.append_layout
-create_consistency_proof = _core.create_consistency_proof
-validate_consistency_proof = _core.validate_consistency_proof
-proof_matches_checkpoints = _core.proof_matches_checkpoints
-load_consistency_proof = _core.load_consistency_proof
-_write_new = _core._write_new
-main = _core.main
+range_layout = _engine.range_layout
+append_layout = _engine.append_layout
+create_consistency_proof = _engine.create_consistency_proof
+validate_consistency_proof = _engine.validate_consistency_proof
+proof_matches_checkpoints = _engine.proof_matches_checkpoints
+load_consistency_proof = _engine.load_consistency_proof
+_write_new = _engine._write_new
+main = _engine.main
 
 
 if __name__ == "__main__":
