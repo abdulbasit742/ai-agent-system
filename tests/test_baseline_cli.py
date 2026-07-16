@@ -81,8 +81,9 @@ class BaselineCliTests(unittest.TestCase):
                 status = app.main([
                     "baseline", str(path), "--create", "--scan-path", str(root),
                 ])
+            preserved = path.read_text()
         self.assertEqual(2, status)
-        self.assertEqual("do not replace", path.read_text())
+        self.assertEqual("do not replace", preserved)
 
 
 if __name__ == "__main__":
