@@ -21,6 +21,7 @@ EXPECTED_NAME = "basit-agent-system"
 EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
     "agent_audit.py",
+    "agent_audit_events.py",
     "agent_baseline.py",
     "agent_changed_lines.py",
     "agent_cli.py",
