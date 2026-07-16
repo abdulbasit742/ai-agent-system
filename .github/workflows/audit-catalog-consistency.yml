@@ -1,0 +1,239 @@
+name: audit-catalog-consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  consistency-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test audit catalog consistency proofs
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_catalog_consistency.py" -v \
+            > "$RUNNER_TEMP/audit-catalog-consistency-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 220 "$RUNNER_TEMP/audit-catalog-consistency-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-catalog-consistency-tests.log"
+      - name: Re-run checkpoint, catalog, segment, and audit regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_catalog.py" -v
+          python -m unittest discover -s tests -p "test_audit_segments.py" -v
+          python -m unittest discover -s tests -p "test_agent_audit.py" -v
+      - name: Compile consistency runtime
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_system.py tests/test_audit_catalog_consistency.py
+      - name: Preserve consistency diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-catalog-consistency-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-catalog-consistency-tests.log
+          if-no-files-found: warn
+
+  consistency-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create and verify compact catalog consistency evidence
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-catalog-consistency"
+          PREVIOUS="$ROOT/previous"
+          CANDIDATE="$ROOT/candidate"
+          FORK="$ROOT/fork"
+          PREVIOUS_ARCHIVE="$PREVIOUS/segments"
+          CANDIDATE_ARCHIVE="$CANDIDATE/segments"
+          FORK_ARCHIVE="$FORK/segments"
+          PREVIOUS_CATALOG="$PREVIOUS_ARCHIVE/catalog.json"
+          CANDIDATE_CATALOG="$CANDIDATE_ARCHIVE/catalog.json"
+          FORK_CATALOG="$FORK_ARCHIVE/catalog.json"
+          CANDIDATE_ACTIVE="$CANDIDATE/active.jsonl"
+          FORK_ACTIVE="$FORK/active.jsonl"
+          PREVIOUS_CHECKPOINT="$ROOT/previous-checkpoint.json"
+          CANDIDATE_CHECKPOINT="$ROOT/candidate-checkpoint.json"
+          FORK_CHECKPOINT="$ROOT/fork-checkpoint.json"
+          PROOF="$ROOT/consistency-proof.json"
+          mkdir -p "$PREVIOUS_ARCHIVE" "$CANDIDATE_ARCHIVE" "$FORK_ARCHIVE"
+
+          python agent_system.py --audit-log "$CANDIDATE_ACTIVE" scan . \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          python agent_audit_segments.py rotate \
+            --path "$CANDIDATE_ACTIVE" \
+            --output-dir "$CANDIDATE_ARCHIVE/segment-one" --format json \
+            > "$ROOT/rotate-one.json"
+          cp "$CANDIDATE_ACTIVE" "$FORK_ACTIVE"
+          cp -R "$CANDIDATE_ARCHIVE/segment-one" "$PREVIOUS_ARCHIVE/segment-one"
+          cp -R "$CANDIDATE_ARCHIVE/segment-one" "$FORK_ARCHIVE/segment-one"
+
+          python agent_audit_catalog.py init "$CANDIDATE_CATALOG" \
+            --active "$CANDIDATE_ACTIVE" --format json > "$ROOT/catalog-one.json"
+          CATALOG_ONE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-one.json")
+          cp "$CANDIDATE_CATALOG" "$PREVIOUS_CATALOG"
+          python agent_audit_catalog.py init "$FORK_CATALOG" \
+            --active "$FORK_ACTIVE" --format json > "$ROOT/fork-catalog-one.json"
+          FORK_ONE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/fork-catalog-one.json")
+          test "$FORK_ONE" = "$CATALOG_ONE"
+
+          python agent_audit_checkpoint.py create "$PREVIOUS_CATALOG" "$PREVIOUS_CHECKPOINT" \
+            --expected-catalog-id "$CATALOG_ONE" --format json \
+            > "$ROOT/previous-checkpoint-report.json"
+          PREVIOUS_CHECKPOINT_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/previous-checkpoint-report.json")
+
+          python agent_system.py --audit-log "$CANDIDATE_ACTIVE" guard python -m unittest \
+            > "$ROOT/candidate-guard.json"
+          python agent_audit_segments.py rotate \
+            --path "$CANDIDATE_ACTIVE" \
+            --output-dir "$CANDIDATE_ARCHIVE/segment-two" --format json \
+            > "$ROOT/rotate-two.json"
+          python agent_system.py --audit-log "$CANDIDATE_ACTIVE" scrub README.md \
+            --output "$ROOT/readme.scrubbed" > "$ROOT/candidate-scrub.json"
+          python agent_audit_segments.py rotate \
+            --path "$CANDIDATE_ACTIVE" \
+            --output-dir "$CANDIDATE_ARCHIVE/segment-three" --format json \
+            > "$ROOT/rotate-three.json"
+          python agent_audit_catalog.py sync "$CANDIDATE_CATALOG" \
+            --expected-catalog-id "$CATALOG_ONE" --active "$CANDIDATE_ACTIVE" \
+            --format json > "$ROOT/catalog-candidate.json"
+          CANDIDATE_CATALOG_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-candidate.json")
+          python agent_audit_checkpoint.py create "$CANDIDATE_CATALOG" "$CANDIDATE_CHECKPOINT" \
+            --expected-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --active "$CANDIDATE_ACTIVE" --format json \
+            > "$ROOT/candidate-checkpoint-report.json"
+          CANDIDATE_CHECKPOINT_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/candidate-checkpoint-report.json")
+
+          python agent_system.py --audit-log "$FORK_ACTIVE" guard python -m compileall \
+            > "$ROOT/fork-guard.json"
+          python agent_audit_segments.py rotate \
+            --path "$FORK_ACTIVE" --output-dir "$FORK_ARCHIVE/segment-two" \
+            --format json > "$ROOT/fork-rotate-two.json"
+          python agent_audit_catalog.py sync "$FORK_CATALOG" \
+            --expected-catalog-id "$FORK_ONE" --active "$FORK_ACTIVE" \
+            --format json > "$ROOT/catalog-fork.json"
+          FORK_CATALOG_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-fork.json")
+          python agent_audit_checkpoint.py create "$FORK_CATALOG" "$FORK_CHECKPOINT" \
+            --expected-catalog-id "$FORK_CATALOG_ID" --active "$FORK_ACTIVE" \
+            --format json > "$ROOT/fork-checkpoint-report.json"
+          FORK_CHECKPOINT_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/fork-checkpoint-report.json")
+
+          python agent_audit_consistency.py prove \
+            "$PREVIOUS_CATALOG" "$PREVIOUS_CHECKPOINT" \
+            "$CANDIDATE_CATALOG" "$CANDIDATE_CHECKPOINT" "$PROOF" \
+            --expected-previous-catalog-id "$CATALOG_ONE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --candidate-active "$CANDIDATE_ACTIVE" --format json \
+            > "$ROOT/proof-report.json"
+          python agent_audit_consistency.py verify \
+            "$PROOF" "$PREVIOUS_CHECKPOINT" "$CANDIDATE_CHECKPOINT" \
+            --expected-previous-catalog-id "$CATALOG_ONE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/verify-full.json"
+
+          set +e
+          python agent_audit_consistency.py lineage \
+            "$CANDIDATE_CATALOG" "$CANDIDATE_CHECKPOINT" \
+            "$PREVIOUS_CATALOG" "$PREVIOUS_CHECKPOINT" \
+            --expected-previous-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-previous-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CATALOG_ONE" \
+            --expected-candidate-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --previous-active "$CANDIDATE_ACTIVE" --format json \
+            > "$ROOT/rollback.json" 2> "$ROOT/rollback.err"
+          ROLLBACK_STATUS=$?
+          python agent_audit_consistency.py lineage \
+            "$CANDIDATE_CATALOG" "$CANDIDATE_CHECKPOINT" \
+            "$FORK_CATALOG" "$FORK_CHECKPOINT" \
+            --expected-previous-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-previous-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$FORK_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$FORK_CHECKPOINT_ID" \
+            --previous-active "$CANDIDATE_ACTIVE" --candidate-active "$FORK_ACTIVE" \
+            --format json > "$ROOT/fork.json" 2> "$ROOT/fork.err"
+          FORK_STATUS=$?
+          set -e
+          test "$ROLLBACK_STATUS" -eq 1
+          test "$FORK_STATUS" -eq 1
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit_checkpoint import _canonical_bytes, _identifier
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-catalog-consistency'
+          proof = json.loads((root / 'consistency-proof.json').read_text())
+          proof['append_frontier'][0]['hash'] = 'f' * 64
+          core = dict(proof)
+          core.pop('consistency_id')
+          proof['consistency_id'] = _identifier(b'audit-catalog-consistency-proof-v1', core)
+          (root / 'tampered-proof.json').write_bytes(_canonical_bytes(proof))
+          PY
+          set +e
+          python agent_audit_consistency.py verify \
+            "$ROOT/tampered-proof.json" "$PREVIOUS_CHECKPOINT" "$CANDIDATE_CHECKPOINT" \
+            --expected-previous-catalog-id "$CATALOG_ONE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/tampered.json" 2> "$ROOT/tampered.err"
+          TAMPER_STATUS=$?
+          set -e
+          test "$TAMPER_STATUS" -eq 2
+
+          rm -rf "$PREVIOUS" "$CANDIDATE" "$FORK"
+          python agent_audit_consistency.py verify \
+            "$PROOF" "$PREVIOUS_CHECKPOINT" "$CANDIDATE_CHECKPOINT" \
+            --expected-previous-catalog-id "$CATALOG_ONE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/verify-portable.json"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-catalog-consistency'
+          proof = json.loads((root / 'proof-report.json').read_text())
+          full = json.loads((root / 'verify-full.json').read_text())
+          portable = json.loads((root / 'verify-portable.json').read_text())
+          rollback = json.loads((root / 'rollback.json').read_text())
+          fork = json.loads((root / 'fork.json').read_text())
+          assert proof['accepted'] is full['accepted'] is portable['accepted'] is True
+          assert proof['relation'] == full['relation'] == portable['relation'] == 'right-descendant'
+          assert proof['direct_predecessor_verified'] is True
+          assert proof['consistency_id'] == full['consistency_id'] == portable['consistency_id']
+          assert rollback['relation'] == 'rollback'
+          assert rollback['violations'][0]['rule_id'] == 'AUK009'
+          assert fork['relation'] == 'fork'
+          assert fork['violations'][0]['rule_id'] == 'AUK010'
+          PY
+      - name: Preserve verified consistency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-catalog-consistency-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-catalog-consistency/
+          if-no-files-found: error
