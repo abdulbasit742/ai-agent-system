@@ -243,7 +243,10 @@ def create_consistency_proof(
     candidate = validate_state(candidate_state)
     previous_cp = checkpoint_matches_state(previous_checkpoint, previous)
     candidate_cp = checkpoint_matches_state(candidate_checkpoint, candidate)
-    relation_report = lineage(previous, candidate)
+    try:
+        relation_report = lineage(previous, candidate)
+    except CheckpointError as exc:
+        raise ConsistencyError(str(exc)) from exc
     if not relation_report["accepted"]:
         raise ConsistencyDenied(_denial_report(relation_report))
     previous_count = len(previous["entries"])
