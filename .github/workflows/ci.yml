@@ -37,10 +37,15 @@ jobs:
         run: python -m unittest discover -s tests -p "test_agent_git.py" -v
       - name: Test changed-file scanner CLI
         run: python -m unittest discover -s tests -p "test_changed_scan_cli.py" -v
-      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py tests scripts
+      - name: Test Git added-line scope model
+        run: python -m unittest discover -s tests -p "test_agent_git_lines.py" -v
+      - name: Test added-line security gate
+        run: python -m unittest discover -s tests -p "test_added_line_gate.py" -v
+      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
       - run: python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
       - run: python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
+      - run: python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
       - run: python agent_system.py scan . --format json --fail-on high
       - run: python agent_system.py guard python -m unittest discover -s tests
