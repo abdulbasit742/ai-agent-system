@@ -8,6 +8,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - configurable rule packs with mandatory core protections
 - exact-fingerprint baselines and new-findings-only CI gates
 - Git-aware changed-file pull-request gates
+- added-line-only regression gates for low-noise reviews
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -55,6 +56,32 @@ python agent_system.py scan . \
 The system resolves refs to commit SHAs, calculates a merge-base diff, parses NUL-delimited paths, and fails closed for missing history, invalid refs, malformed output, or paths escaping the repository. Deleted and renamed paths participate in scoped baseline resolution without being read from disk.
 
 See [docs/changed-file-gating.md](docs/changed-file-gating.md).
+
+## Added-line-only gates
+
+For the lowest-noise pull-request gate, report only findings whose starting line was added or replaced:
+
+```bash
+python agent_changed_lines.py . \
+  --changed-from origin/main \
+  --format json \
+  --fail-on high
+```
+
+Use the same reviewed baseline while restricting both new findings and resolved findings to the changed line ranges:
+
+```bash
+python agent_changed_lines.py . \
+  --changed-from origin/main \
+  --new-only \
+  --show-existing \
+  --format sarif \
+  --output agent-system.sarif
+```
+
+Added and copied files are scanned fully. Deleted files place all old findings in resolution scope. Modified files use separate old and new zero-context hunk ranges, so inserting safe lines before a legacy issue does not falsely reclassify it. A pure rename creates no added-line finding.
+
+See [docs/added-line-gating.md](docs/added-line-gating.md).
 
 ## Baseline adoption for existing repositories
 
@@ -160,11 +187,12 @@ Development is tracked as an ordered 1-to-400 sequence. Every number must preser
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
 python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
+python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```
