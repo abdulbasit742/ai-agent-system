@@ -37,12 +37,14 @@ basit-agent-segments = "agent_audit_segments:main"
 basit-agent-catalog = "agent_audit_catalog:main"
 basit-agent-catalog-checkpoint = "agent_audit_checkpoint:main"
 basit-agent-catalog-consistency = "agent_audit_consistency:main"
+basit-agent-audit-bundle = "agent_audit_bundle:main"
 agent-system = "agent_cli:main"
 agent-changed-lines = "agent_cli:changed_lines_main"
 agent-audit-segments = "agent_audit_segments:main"
 agent-audit-catalog = "agent_audit_catalog:main"
 agent-audit-catalog-checkpoint = "agent_audit_checkpoint:main"
 agent-audit-catalog-consistency = "agent_audit_consistency:main"
+agent-audit-bundle = "agent_audit_bundle:main"
 
 [tool.setuptools]
 include-package-data = false
@@ -53,6 +55,7 @@ py-modules = [
   "agent_audit_catalog",
   "agent_audit_checkpoint",
   "agent_audit_consistency",
+  "agent_audit_bundle",
   "agent_baseline",
   "agent_changed_lines",
   "agent_cli",
