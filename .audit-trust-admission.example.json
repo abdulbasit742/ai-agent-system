@@ -1,0 +1,45 @@
+{
+  "bundle": {
+    "allowed_types": [
+      "snapshot",
+      "transition"
+    ],
+    "max_bytes": 67108864,
+    "max_files": 262,
+    "max_proofs": 128,
+    "min_proofs": 1
+  },
+  "candidate": {
+    "allowed_checkpoint_ids": [],
+    "allowed_head_bundle_ids": [],
+    "allowed_head_catalog_ids": [],
+    "allowed_state_ids": [],
+    "max_entry_count": 1000000,
+    "max_generation": 1000000,
+    "max_segment_count": 1000000,
+    "min_entry_count": 1,
+    "min_generation": 1,
+    "min_segment_count": 1
+  },
+  "selection": {
+    "allowed_bundle_ids": [],
+    "allowed_sequences": [],
+    "require_anchor": false,
+    "require_head": true,
+    "required_bundle_ids": [],
+    "required_sequences": []
+  },
+  "transition": {
+    "allowed_previous_checkpoint_ids": [],
+    "allowed_previous_state_ids": [],
+    "allowed_relations": [
+      "right-descendant"
+    ],
+    "max_entry_delta": 1000000,
+    "max_generation_delta": 1000000,
+    "min_entry_delta": 1,
+    "min_generation_delta": 1,
+    "require_single_step": false
+  },
+  "version": 1
+}

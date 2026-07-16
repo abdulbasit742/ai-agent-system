@@ -1,0 +1,117 @@
+name: audit-trust-admission-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  trust-admission-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and evaluate outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/trust-admission-venv"
+          BIN="$RUNNER_TEMP/trust-admission-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-trust-admission"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+          ROOT="$ROOT" "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit_trust import canonical_json, create_state
+          from agent_audit_trust_checkpoint import create_checkpoint, create_proof
+
+          root = Path(os.environ["ROOT"])
+          def h(value): return f"{value:064x}"
+          verified = {
+              "valid": True,
+              "bundle_id": h(1001),
+              "bundle_type": "snapshot",
+              "candidate": {
+                  "checkpoint_id": h(2001),
+                  "catalog_id": h(3001),
+                  "generation": 1,
+                  "segment_count": 1,
+                  "merkle_root": h(4001),
+              },
+              "previous": None,
+              "consistency": None,
+              "proof_count": 1,
+              "segment_count": 0,
+              "proof_ids": [h(5001)],
+              "segment_ids": [h(6001)],
+              "files": 4,
+              "bytes": 1000,
+          }
+          report = {
+              "admitted": True,
+              "policy_sha256": h(7001),
+              "decision_id": h(8001),
+              "identity": {
+                  "bundle_id": verified["bundle_id"],
+                  "bundle_type": "snapshot",
+                  "candidate_checkpoint_id": verified["candidate"]["checkpoint_id"],
+                  "candidate_catalog_id": verified["candidate"]["catalog_id"],
+                  "previous_checkpoint_id": None,
+                  "previous_catalog_id": None,
+              },
+              "evidence": {
+                  "files": 4,
+                  "bytes": 1000,
+                  "proof_count": 1,
+                  "sealed_segment_count": 0,
+                  "selected_segment_indexes": [1],
+                  "selected_segment_ids": [h(6001)],
+                  "sealed_segment_indexes": [],
+                  "candidate_generation": 1,
+                  "candidate_segment_count": 1,
+                  "generation_delta": None,
+              },
+              "violations": [],
+          }
+          state = create_state(report, verified)
+          checkpoint = create_checkpoint(state)
+          proof = create_proof(state, checkpoint, sequence=1)
+          (root / "checkpoint.json").write_bytes(canonical_json(checkpoint))
+          (root / "proof.json").write_bytes(canonical_json(proof))
+          (root / "pins.json").write_text(json.dumps({
+              "checkpoint": checkpoint["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          CHECKPOINT=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint"])' "$ROOT/pins.json")
+          "$BIN/basit-agent-audit-trust-bundle" create "$ROOT/handoff" \
+            --candidate-checkpoint "$ROOT/checkpoint.json" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT" \
+            --proof "$ROOT/proof.json" \
+            --format json > "$ROOT/create.json"
+          BUNDLE=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/create.json")
+          "$BIN/basit-agent-audit-trust-admission" init "$ROOT/policy.json" --format json > "$ROOT/policy-create.json"
+          rm "$ROOT/checkpoint.json" "$ROOT/proof.json"
+          "$BIN/agent-audit-trust-admission" evaluate "$ROOT/handoff" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$BUNDLE" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT" \
+            --format json > "$ROOT/decision.json"
+          "$BIN/python" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["admitted"] and d["decision_id"]' "$ROOT/decision.json"
+      - name: Preserve installed admission evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-admission-package-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/installed-audit-trust-admission/
+          if-no-files-found: error
