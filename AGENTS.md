@@ -6,11 +6,15 @@
 - Preserve licenses and reviewed commits in `integrations.lock.json`.
 - Add stable rule IDs and regression tests for scanner or command-guard changes.
 - Require explicit `--approve` for integration execution; publishing must never be the default.
+- Execute the numbered 1-to-400 workflow in order. Preserve completed work and update `development-progress.json` after every verified step.
+- The `core` scanner pack and rules `BAS000` through `BAS003` are mandatory and must never be configurable off.
 
 Verification:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py tests scripts
+python agent_system.py config .agent-system.example.json
+python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py scan . --format json --fail-on high
 ```
