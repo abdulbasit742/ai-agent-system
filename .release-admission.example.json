@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "project": {
+    "name": "basit-agent-system",
+    "allowed_versions": [
+      "0.1.0"
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/abdulbasit742/ai-agent-system"
+  },
+  "artifacts": {
+    "count": 1,
+    "max_size_bytes": 1048576,
+    "modules": [
+      "agent_baseline.py",
+      "agent_changed_lines.py",
+      "agent_cli.py",
+      "agent_config.py",
+      "agent_git.py",
+      "agent_policy.py",
+      "agent_system.py",
+      "agent_version.py"
+    ],
+    "console_scripts": [
+      "agent-changed-lines",
+      "agent-system",
+      "basit-agent",
+      "basit-agent-lines"
+    ],
+    "max_runtime_dependencies": 0
+  },
+  "sbom": {
+    "spdx_version": "SPDX-2.3",
+    "data_license": "CC0-1.0",
+    "allowed_licenses": [
+      "MIT"
+    ],
+    "required_checksum_algorithms": [
+      "SHA1",
+      "SHA256"
+    ],
+    "files_analyzed": true
+  },
+  "provenance": {
+    "statement_type": "https://in-toto.io/Statement/v1",
+    "predicate_type": "https://slsa.dev/provenance/v1",
+    "accept_unsigned": true,
+    "builder_workflow": ".github/workflows/ci.yml",
+    "build_definition": "docs/reproducible-releases.md"
+  }
+}
