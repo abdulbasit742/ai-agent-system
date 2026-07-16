@@ -18,13 +18,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Test portable audit trust bundles
-        run: python -m unittest discover -s tests -p "test_audit_trust_bundle.py" -v
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_trust_bundle.py" -v \
+            > "$RUNNER_TEMP/audit-trust-bundle-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            cat "$RUNNER_TEMP/audit-trust-bundle-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-trust-bundle-tests.log"
       - name: Re-run trust checkpoint and consistency regressions
         run: |
           python -m unittest discover -s tests -p "test_audit_trust_checkpoint.py" -v
           python -m unittest discover -s tests -p "test_audit_trust_consistency.py" -v
       - name: Compile runtime
-        run: python -m compileall -q agent_audit_trust_bundle.py tests/test_audit_trust_bundle.py
+        run: python -m compileall -q agent_audit_trust_bundle.py agent_audit_trust_bundle_core.py tests/test_audit_trust_bundle.py
+      - name: Preserve test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-bundle-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-bundle-tests.log
+          if-no-files-found: warn
 
   trust-bundle-integration:
     runs-on: ubuntu-latest
@@ -38,6 +55,7 @@ jobs:
           set -euo pipefail
           ROOT="$RUNNER_TEMP/audit-trust-bundle"
           mkdir -p "$ROOT"
+          exec > >(tee "$ROOT/integration.log") 2>&1
           ROOT="$ROOT" python - <<'PY'
           import json
           import os
@@ -88,8 +106,9 @@ jobs:
             --format json > "$ROOT/verify.json"
           python -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["bundle_type"]=="transition"' "$ROOT/verify.json"
       - name: Preserve trust handoff evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: audit-trust-bundle-${{ github.sha }}
           path: ${{ runner.temp }}/audit-trust-bundle/
-          if-no-files-found: error
+          if-no-files-found: warn
