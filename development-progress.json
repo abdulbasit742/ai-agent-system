@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "sequence": {"start": 1, "end": 400, "latest_completed": 25, "next_expected": 26},
+  "sequence": {"start": 1, "end": 400, "latest_completed": 26, "next_expected": 27},
   "history": [
     {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"}
   ],
@@ -25,6 +25,13 @@
       "status": "completed",
       "summary": "Added immutable exact-boundary snapshot and transition handoff bundles for pinned audit trust checkpoints, mandatory candidate-head inclusion proofs, right-descendant consistency binding, checksums, external pins, and offline verification.",
       "verification": {"unit_tests": 445, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_handoffs": "passed", "mandatory_candidate_head_proof": "passed", "offline_verification_without_loose_evidence": "passed", "exact_file_and_checksum_boundary": "passed", "external_bundle_and_checkpoint_pins": "passed", "proof_checkpoint_and_consistency_substitution_rejection": "passed", "symlink_and_overwrite_rejection": "passed", "installed_trust_bundle_cli": "passed", "read_only_trust_bundle_ci": "passed", "twenty_two_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 26,
+      "title": "Consumer audit trust handoff admission",
+      "status": "completed",
+      "summary": "Added consumer-owned canonical policies that fully verify audit trust handoffs before applying bundle, candidate identity, proof selection, and transition constraints with deterministic decisions and stable denials.",
+      "verification": {"unit_tests": 465, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_admission": "passed", "canonical_policy_hash": "passed", "deterministic_decision_id": "passed", "candidate_state_checkpoint_and_head_allowlists": "passed", "sequence_and_bundle_selection_controls": "passed", "entry_and_generation_delta_controls": "passed", "admitted_denied_invalid_exit_semantics": "passed", "installed_trust_admission_cli": "passed", "read_only_trust_admission_ci": "passed", "twenty_three_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
