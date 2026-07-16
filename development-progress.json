@@ -1,19 +1,8 @@
 {
   "version": 2,
-  "sequence": {
-    "start": 1,
-    "end": 400,
-    "latest_completed": 24,
-    "next_expected": 25
-  },
+  "sequence": {"start": 1, "end": 400, "latest_completed": 25, "next_expected": 26},
   "history": [
-    {
-      "start": 1,
-      "end": 22,
-      "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36",
-      "path": "development-progress.json",
-      "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"
-    }
+    {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"}
   ],
   "completed": [
     {
@@ -21,48 +10,21 @@
       "title": "Portable audit trust-state Merkle checkpoints",
       "status": "completed",
       "summary": "Added canonical Merkle checkpoints for pinned audit bundle trust states, compact per-bundle inclusion proofs, proof-only verification, optional full portable-bundle binding, immutable evidence, and rollback/fork lineage gates.",
-      "verification": {
-        "unit_tests": 404,
-        "python_versions": ["3.11", "3.12"],
-        "compileall": "passed",
-        "canonical_checkpoint_and_merkle_root": "passed",
-        "external_state_and_checkpoint_pins": "passed",
-        "first_middle_last_and_odd_tree_proofs": "passed",
-        "proof_only_verification": "passed",
-        "snapshot_and_transition_bundle_binding": "passed",
-        "rehashed_audit_path_and_checkpoint_substitution_rejection": "passed",
-        "rollback_and_fork_lineage_gates": "passed",
-        "immutable_atomic_outputs": "passed",
-        "installed_trust_checkpoint_cli": "passed",
-        "read_only_trust_checkpoint_ci": "passed",
-        "nineteen_module_dependency_free_wheel": "passed",
-        "self_scan_active_findings": 0,
-        "safe_command_guard": "passed"
-      }
+      "verification": {"unit_tests": 404, "python_versions": ["3.11", "3.12"], "compileall": "passed", "canonical_checkpoint_and_merkle_root": "passed", "external_state_and_checkpoint_pins": "passed", "first_middle_last_and_odd_tree_proofs": "passed", "proof_only_verification": "passed", "snapshot_and_transition_bundle_binding": "passed", "rehashed_audit_path_and_checkpoint_substitution_rejection": "passed", "rollback_and_fork_lineage_gates": "passed", "immutable_atomic_outputs": "passed", "installed_trust_checkpoint_cli": "passed", "read_only_trust_checkpoint_ci": "passed", "nineteen_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     },
     {
       "number": 24,
       "title": "Compact audit trust consistency proofs",
       "status": "completed",
       "summary": "Added compact append-only consistency proofs between pinned audit trust checkpoints with independent root reconstruction, authenticated first-transition boundaries, proof-only verification, immutable evidence, and rollback/fork denials.",
-      "verification": {
-        "unit_tests": 424,
-        "python_versions": ["3.11", "3.12"],
-        "compileall": "passed",
-        "canonical_compact_range_layout": "passed",
-        "previous_and_candidate_root_reconstruction": "passed",
-        "proof_only_checkpoint_verification": "passed",
-        "authenticated_transition_boundary": "passed",
-        "logarithmic_frontier_size": "passed",
-        "rollback_and_fork_denials": "passed",
-        "rehashed_frontier_layout_boundary_tamper_rejection": "passed",
-        "immutable_atomic_outputs": "passed",
-        "installed_trust_consistency_cli": "passed",
-        "read_only_trust_consistency_ci": "passed",
-        "twenty_module_dependency_free_wheel": "passed",
-        "self_scan_active_findings": 0,
-        "safe_command_guard": "passed"
-      }
+      "verification": {"unit_tests": 424, "python_versions": ["3.11", "3.12"], "compileall": "passed", "canonical_compact_range_layout": "passed", "previous_and_candidate_root_reconstruction": "passed", "proof_only_checkpoint_verification": "passed", "authenticated_transition_boundary": "passed", "logarithmic_frontier_size": "passed", "rollback_and_fork_denials": "passed", "rehashed_frontier_layout_boundary_tamper_rejection": "passed", "immutable_atomic_outputs": "passed", "installed_trust_consistency_cli": "passed", "read_only_trust_consistency_ci": "passed", "twenty_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 25,
+      "title": "Portable audit trust handoff bundles",
+      "status": "completed",
+      "summary": "Added immutable exact-boundary snapshot and transition handoff bundles for pinned audit trust checkpoints, mandatory candidate-head inclusion proofs, right-descendant consistency binding, checksums, external pins, and offline verification.",
+      "verification": {"unit_tests": 445, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_handoffs": "passed", "mandatory_candidate_head_proof": "passed", "offline_verification_without_loose_evidence": "passed", "exact_file_and_checksum_boundary": "passed", "external_bundle_and_checkpoint_pins": "passed", "proof_checkpoint_and_consistency_substitution_rejection": "passed", "symlink_and_overwrite_rejection": "passed", "installed_trust_bundle_cli": "passed", "read_only_trust_bundle_ci": "passed", "twenty_two_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
