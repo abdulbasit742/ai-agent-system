@@ -28,6 +28,8 @@ Task 35 reuses the reviewed receiver bundle engine through a deterministic isola
 
 Loading fails closed if any expected source token is missing or any receiver-specific boundary token remains after adaptation. Regression tests confirm the original `ARB` namespace and manifest name are unchanged.
 
+The repository scanner correctly reports the adapter's single local compilation call as `BAS013`. `.agent-system-policy.json` suppresses only that exact fingerprint and path, assigns ownership to `repository-security`, records the local-reviewed-source rationale, and expires on `2027-07-16`. Any source movement, evidence change, second dynamic-execution site, wildcard path, or expired policy becomes active again. External or caller-provided source is never compiled.
+
 ## Stable diagnostics
 
 - `AAB001`: unsafe path, symlink, or non-regular filesystem object;
