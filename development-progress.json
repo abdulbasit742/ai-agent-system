@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 9,
-    "next_expected": 10
+    "latest_completed": 10,
+    "next_expected": 11
   },
   "completed": [
     {
@@ -172,6 +172,26 @@
         "sbom_and_provenance_constraints": "passed",
         "admit_deny_invalid_exit_semantics": "passed",
         "read_only_admission_ci": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 10,
+      "title": "Verified release transition and rollback gate",
+      "status": "completed",
+      "summary": "Added deterministic comparison of two fully verified release bundles, caller-pinned trusted and candidate identities, rollback/replay/same-version-mutation detection, module and interface change analysis, and a read-only transition decision workflow.",
+      "verification": {
+        "unit_tests": 144,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "policy_schema_and_hash": "passed",
+        "trusted_release_anchor_binding": "passed",
+        "version_and_epoch_rollback_detection": "passed",
+        "replay_and_same_version_mutation_detection": "passed",
+        "module_command_dependency_and_license_diff": "passed",
+        "transition_exit_semantics": "passed",
+        "read_only_transition_ci": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
