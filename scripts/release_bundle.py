@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import shutil
 import sys
@@ -21,6 +20,7 @@ except ModuleNotFoundError:  # Direct execution from the scripts directory.
 MANIFEST_NAME = "release-manifest.json"
 CHECKSUMS_NAME = "SHA256SUMS"
 MANIFEST_VERSION = 1
+WHEEL_MEDIA_TYPE = "application/vnd.pypa.wheel+zip"
 HEX_40 = re.compile(r"^[0-9a-f]{40}$")
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
@@ -48,14 +48,18 @@ def _release_id(payload: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_json(core)).hexdigest()
 
 
-def _source_commit(value: str) -> str:
+def _source_commit(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ReleaseBundleError("source commit must be a string")
     normalized = value.strip().lower()
     if not HEX_40.fullmatch(normalized):
         raise ReleaseBundleError("source commit must be an exact 40-character hexadecimal SHA")
     return normalized
 
 
-def _source_epoch(value: int | str) -> int:
+def _source_epoch(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ReleaseBundleError("source date epoch must be an integer")
     try:
         epoch = int(value)
     except (TypeError, ValueError) as exc:
@@ -98,17 +102,25 @@ def _prepare_output(directory: Path) -> Path:
     return resolved
 
 
+def _wheel_identity(summary: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "project",
+        "version",
+        "modules",
+        "console_scripts",
+        "runtime_dependencies",
+    )
+    return {key: summary[key] for key in keys}
+
+
 def _artifact_record(path: Path, wheel_summary: dict[str, Any]) -> dict[str, Any]:
+    identity = _wheel_identity(wheel_summary)
     return {
         "filename": path.name,
-        "media_type": "application/vnd.pypa.wheel+zip",
+        "media_type": WHEEL_MEDIA_TYPE,
         "sha256": sha256_file(path),
         "size": path.stat().st_size,
-        "project": wheel_summary["project"],
-        "version": wheel_summary["version"],
-        "modules": wheel_summary["modules"],
-        "console_scripts": wheel_summary["console_scripts"],
-        "runtime_dependencies": wheel_summary["runtime_dependencies"],
+        **identity,
     }
 
 
@@ -127,22 +139,29 @@ def create_bundle(
 
     commit = _source_commit(source_commit)
     epoch = _source_epoch(source_date_epoch)
-    destination = _prepare_output(output_dir)
 
-    records: list[dict[str, Any]] = []
+    validated: list[tuple[Path, dict[str, Any]]] = []
     try:
         for path in sorted(artifacts, key=lambda item: item.name):
-            summary = validate_wheel(path)
+            validated.append((path, validate_wheel(path)))
+    except WheelValidationError as exc:
+        raise ReleaseBundleError(str(exc)) from exc
+
+    identities = [_wheel_identity(summary) for _path, summary in validated]
+    projects = {identity["project"] for identity in identities}
+    versions = {identity["version"] for identity in identities}
+    if len(projects) != 1 or len(versions) != 1:
+        raise ReleaseBundleError("all release artifacts must share one project and version")
+
+    destination = _prepare_output(output_dir)
+    records: list[dict[str, Any]] = []
+    try:
+        for path, summary in validated:
             target = destination / path.name
             shutil.copyfile(path, target, follow_symlinks=False)
             records.append(_artifact_record(target, summary))
-    except (OSError, WheelValidationError) as exc:
-        raise ReleaseBundleError(str(exc)) from exc
-
-    projects = {record["project"] for record in records}
-    versions = {record["version"] for record in records}
-    if len(projects) != 1 or len(versions) != 1:
-        raise ReleaseBundleError("all release artifacts must share one project and version")
+    except OSError as exc:
+        raise ReleaseBundleError(f"unable to copy release artifact: {exc}") from exc
 
     manifest: dict[str, Any] = {
         "manifest_version": MANIFEST_VERSION,
@@ -157,15 +176,17 @@ def create_bundle(
     }
     manifest["release_id"] = _release_id(manifest)
     manifest_path = destination / MANIFEST_NAME
-    manifest_path.write_bytes(_canonical_json(manifest))
-
-    checksum_lines = [
-        f"{record['sha256']}  {record['filename']}" for record in records
-    ]
-    checksum_lines.append(f"{sha256_file(manifest_path)}  {MANIFEST_NAME}")
-    (destination / CHECKSUMS_NAME).write_text(
-        "\n".join(sorted(checksum_lines)) + "\n", encoding="utf-8"
-    )
+    try:
+        manifest_path.write_bytes(_canonical_json(manifest))
+        checksum_lines = [
+            f"{record['sha256']}  {record['filename']}" for record in records
+        ]
+        checksum_lines.append(f"{sha256_file(manifest_path)}  {MANIFEST_NAME}")
+        (destination / CHECKSUMS_NAME).write_text(
+            "\n".join(sorted(checksum_lines)) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        raise ReleaseBundleError(f"unable to write release evidence: {exc}") from exc
     return manifest
 
 
@@ -183,7 +204,11 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         raise ReleaseBundleError("release manifest fields do not match the reviewed schema")
     if payload["manifest_version"] != MANIFEST_VERSION:
         raise ReleaseBundleError("unsupported release manifest version")
-    if not HEX_64.fullmatch(str(payload["release_id"])):
+    if not isinstance(payload["project"], str) or not payload["project"]:
+        raise ReleaseBundleError("release manifest project must be a non-empty string")
+    if not isinstance(payload["version"], str) or not payload["version"]:
+        raise ReleaseBundleError("release manifest version must be a non-empty string")
+    if not isinstance(payload["release_id"], str) or not HEX_64.fullmatch(payload["release_id"]):
         raise ReleaseBundleError("release manifest has an invalid release id")
     if payload["release_id"] != _release_id(payload):
         raise ReleaseBundleError("release manifest integrity check failed")
@@ -197,6 +222,8 @@ def _load_checksums(path: Path) -> dict[str, str]:
         raise ReleaseBundleError(f"missing {CHECKSUMS_NAME}") from exc
     except OSError as exc:
         raise ReleaseBundleError(f"unable to read {CHECKSUMS_NAME}") from exc
+    if lines != sorted(lines):
+        raise ReleaseBundleError("checksum file must use canonical filename ordering")
     checksums: dict[str, str] = {}
     for line in lines:
         match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._+-]*)", line)
@@ -207,6 +234,47 @@ def _load_checksums(path: Path) -> dict[str, str]:
             raise ReleaseBundleError("checksum file contains duplicate filenames")
         checksums[name] = digest
     return checksums
+
+
+def _validate_record(record: dict[str, Any]) -> str:
+    required = {
+        "filename",
+        "media_type",
+        "sha256",
+        "size",
+        "project",
+        "version",
+        "modules",
+        "console_scripts",
+        "runtime_dependencies",
+    }
+    if set(record) != required:
+        raise ReleaseBundleError("release artifact record fields do not match the reviewed schema")
+    name = record["filename"]
+    if not isinstance(name, str) or not SAFE_NAME.fullmatch(name):
+        raise ReleaseBundleError("release artifact filename is unsafe")
+    if record["media_type"] != WHEEL_MEDIA_TYPE:
+        raise ReleaseBundleError("release artifact media type is not the reviewed wheel type")
+    if not isinstance(record["sha256"], str) or not HEX_64.fullmatch(record["sha256"]):
+        raise ReleaseBundleError("release artifact digest is malformed")
+    if isinstance(record["size"], bool) or not isinstance(record["size"], int) or record["size"] < 0:
+        raise ReleaseBundleError("release artifact size is malformed")
+    if not isinstance(record["project"], str) or not record["project"]:
+        raise ReleaseBundleError("release artifact project is malformed")
+    if not isinstance(record["version"], str) or not record["version"]:
+        raise ReleaseBundleError("release artifact version is malformed")
+    if isinstance(record["modules"], bool) or not isinstance(record["modules"], int) or record["modules"] < 1:
+        raise ReleaseBundleError("release artifact module count is malformed")
+    if (
+        not isinstance(record["console_scripts"], list)
+        or any(not isinstance(item, str) or not item for item in record["console_scripts"])
+        or record["console_scripts"] != sorted(record["console_scripts"])
+        or len(record["console_scripts"]) != len(set(record["console_scripts"]))
+    ):
+        raise ReleaseBundleError("release artifact console script list is malformed")
+    if record["runtime_dependencies"] != 0:
+        raise ReleaseBundleError("release artifact must remain runtime-dependency-free")
+    return name
 
 
 def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
@@ -222,7 +290,7 @@ def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
         "commit", "source_date_epoch", "timestamp_utc"
     }:
         raise ReleaseBundleError("release source metadata does not match the reviewed schema")
-    commit = _source_commit(str(source["commit"]))
+    commit = _source_commit(source["commit"])
     epoch = _source_epoch(source["source_date_epoch"])
     if source["timestamp_utc"] != _timestamp(epoch):
         raise ReleaseBundleError("release source timestamp does not match source date epoch")
@@ -235,15 +303,9 @@ def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
     for record in artifacts:
         if not isinstance(record, dict):
             raise ReleaseBundleError("release artifact records must be objects")
-        required = {
-            "filename", "media_type", "sha256", "size", "project", "version",
-            "modules", "console_scripts", "runtime_dependencies",
-        }
-        if set(record) != required:
-            raise ReleaseBundleError("release artifact record fields do not match the reviewed schema")
-        name = str(record["filename"])
-        if not SAFE_NAME.fullmatch(name) or name in seen_names:
-            raise ReleaseBundleError("release artifact filenames are unsafe or duplicated")
+        name = _validate_record(record)
+        if name in seen_names:
+            raise ReleaseBundleError("release artifact filenames are duplicated")
         seen_names.add(name)
         expected_names.add(name)
         artifact = directory / name
@@ -257,15 +319,13 @@ def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
             summary = validate_wheel(artifact)
         except WheelValidationError as exc:
             raise ReleaseBundleError(str(exc)) from exc
-        expected_summary = {
+        if _wheel_identity(summary) != {
             "project": record["project"],
             "version": record["version"],
             "modules": record["modules"],
             "console_scripts": record["console_scripts"],
             "runtime_dependencies": record["runtime_dependencies"],
-        }
-        actual_summary = {key: summary[key] for key in expected_summary}
-        if actual_summary != expected_summary:
+        }:
             raise ReleaseBundleError(f"release artifact metadata mismatch: {name}")
         if record["project"] != manifest["project"] or record["version"] != manifest["version"]:
             raise ReleaseBundleError("release artifact project/version differs from manifest")
@@ -307,7 +367,7 @@ def compare_wheels(first: Path, second: Path) -> dict[str, Any]:
         raise ReleaseBundleError(str(exc)) from exc
     if left.name != right.name:
         raise ReleaseBundleError("reproducible wheel comparison requires matching filenames")
-    if left_summary != right_summary:
+    if _wheel_identity(left_summary) != _wheel_identity(right_summary):
         raise ReleaseBundleError("wheel metadata differs between builds")
     left_digest = sha256_file(left)
     right_digest = sha256_file(right)
