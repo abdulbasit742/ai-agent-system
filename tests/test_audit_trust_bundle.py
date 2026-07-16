@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from agent_audit_trust import canonical_json
-import test_audit_trust_bundle_cases as _cases
+import audit_trust_bundle_cases as _cases
 
 
 def _write_json(path: Path, payload: dict) -> None:
