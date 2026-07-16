@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "sequence": {"start": 1, "end": 400, "latest_completed": 29, "next_expected": 30},
+  "sequence": {"start": 1, "end": 400, "latest_completed": 30, "next_expected": 31},
   "history": [
     {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"}
   ],
@@ -53,6 +53,13 @@
       "status": "completed",
       "summary": "Added compact append-only consistency proofs between pinned receiver checkpoints with independent root reconstruction, authenticated first accepted-transition boundaries, proof-only verification, immutable evidence, and rollback/fork denials.",
       "verification": {"unit_tests": 525, "python_versions": ["3.11", "3.12"], "compileall": "passed", "isolated_compact_range_adapter": "passed", "canonical_compact_frontier_layout": "passed", "previous_and_candidate_root_reconstruction": "passed", "proof_only_checkpoint_verification": "passed", "authenticated_receiver_transition_boundary": "passed", "checkpoint_state_entry_and_generation_binding": "passed", "logarithmic_frontier_size": "passed", "rollback_and_fork_denials": "passed", "rehashed_frontier_and_boundary_tamper_rejection": "passed", "immutable_mode_0600_outputs": "passed", "installed_receiver_consistency_cli": "passed", "read_only_receiver_consistency_ci": "passed", "twenty_six_module_dependency_free_wheel": "passed", "thirty_two_installed_commands": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 30,
+      "title": "Portable audit trust receiver checkpoint bundles",
+      "status": "completed",
+      "summary": "Added immutable exact-boundary snapshot and transition bundles for pinned receiver checkpoints, mandatory candidate-head inclusion proofs, receiver consistency binding, checksums, external pins, and offline verification without complete receiver states or loose evidence.",
+      "verification": {"unit_tests": 545, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_receiver_bundles": "passed", "mandatory_candidate_head_proof": "passed", "offline_verification_without_loose_evidence": "passed", "native_receiver_evidence_serialization": "passed", "exact_file_and_checksum_boundary": "passed", "external_bundle_and_checkpoint_pins": "passed", "proof_checkpoint_and_consistency_substitution_rejection": "passed", "symlink_and_overwrite_rejection": "passed", "installed_receiver_bundle_cli": "passed", "read_only_receiver_bundle_ci": "passed", "twenty_seven_module_dependency_free_wheel": "passed", "thirty_four_installed_commands": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
