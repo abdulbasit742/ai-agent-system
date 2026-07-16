@@ -11,6 +11,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent_baseline import (
+    DEFAULT_BASELINE_NAME,
+    BaselineError,
+    build_baseline,
+    classify_findings,
+    controls_digest,
+    discover_baseline,
+    load_baseline,
+)
 from agent_config import (
     DEFAULT_CONFIG_NAME,
     ConfigError,
@@ -232,23 +241,57 @@ def load_integrations(root: Path):
     return json.loads((root / "integrations.lock.json").read_text())["integrations"]
 
 
-def render_scan(findings, suppressed, policy, config, output_format, show_suppressed):
+def render_scan(
+    findings,
+    suppressed,
+    policy,
+    config,
+    output_format,
+    show_suppressed,
+    *,
+    baseline=None,
+    existing=None,
+    resolved=None,
+    show_existing=False,
+):
+    existing = existing or []
+    resolved = resolved or []
+    baseline_mode = baseline is not None
+    active_count = len(findings) + len(existing) if baseline_mode else len(findings)
     summary = {
-        "active": len(findings),
+        "active": active_count,
         "suppressed": len(suppressed),
         "expired_suppressions": policy.get("expired_ids", []),
         "enabled_packs": config["enabled_packs"],
         "disabled_rules": config["disabled_rules"],
     }
+    if baseline_mode:
+        summary.update({
+            "new": len(findings),
+            "existing": len(existing),
+            "resolved": len(resolved),
+        })
+
     if output_format == "json":
         payload = {"findings": findings, "summary": summary}
         if show_suppressed:
             payload["suppressed"] = suppressed
+        if baseline_mode:
+            payload["baseline"] = {
+                "source": baseline["source"],
+                "version": baseline["version"],
+                "generated_at": baseline["generated_at"],
+                "baseline_sha256": baseline["baseline_sha256"],
+            }
+            if show_existing:
+                payload["existing_findings"] = existing
+                payload["resolved_findings"] = resolved
         if policy.get("source"):
             payload["policy"] = {"source": policy["source"], "version": policy["version"]}
         if config.get("source"):
             payload["config"] = {"source": config["source"], "version": config["version"]}
         return json.dumps(payload, indent=2)
+
     if output_format == "sarif":
         results = [{
             "ruleId": item["rule_id"],
@@ -271,10 +314,18 @@ def render_scan(findings, suppressed, policy, config, output_format, show_suppre
                 "properties": summary,
             }],
         }, indent=2)
-    lines = [
-        f"Basit Agent System: {len(findings)} active finding(s), {len(suppressed)} suppressed",
-        "Rule packs: " + ", ".join(config["enabled_packs"]),
-    ]
+
+    if baseline_mode:
+        lines = [
+            f"Basit Agent System: {len(findings)} new, {len(existing)} existing, "
+            f"{len(resolved)} resolved, {len(suppressed)} suppressed",
+            f"Baseline: {baseline['source']}",
+        ]
+    else:
+        lines = [
+            f"Basit Agent System: {len(findings)} active finding(s), {len(suppressed)} suppressed",
+        ]
+    lines.append("Rule packs: " + ", ".join(config["enabled_packs"]))
     if config["disabled_rules"]:
         lines.append("Disabled rules: " + ", ".join(config["disabled_rules"]))
     if config.get("source"):
@@ -283,11 +334,23 @@ def render_scan(findings, suppressed, policy, config, output_format, show_suppre
         lines.append(f"Policy: {policy['source']}")
     if policy.get("expired_ids"):
         lines.append("Expired suppressions: " + ", ".join(policy["expired_ids"]))
+    prefix = "NEW " if baseline_mode else ""
     lines.extend(
-        f"- {item['severity'].upper()} {item['rule_id']} {item['path']}:{item['line']} {item['title']}\n"
+        f"- {prefix}{item['severity'].upper()} {item['rule_id']} {item['path']}:{item['line']} {item['title']}\n"
         f"  preview: {item['preview']}\n  fix: {item['fix']}"
         for item in findings
     )
+    if baseline_mode and show_existing:
+        lines.extend(
+            f"- EXISTING {item['severity'].upper()} {item['rule_id']} "
+            f"{item['path']}:{item['line']} {item['title']}"
+            for item in existing
+        )
+        lines.extend(
+            f"- RESOLVED {item['severity'].upper()} {item['rule_id']} "
+            f"{item['path']}:{item['line']}"
+            for item in resolved
+        )
     if show_suppressed:
         lines.extend(
             f"- SUPPRESSED {item['rule_id']} {item['path']}:{item['line']} "
@@ -307,6 +370,12 @@ def _write_template(path: Path, payload: dict, force: bool, label: str) -> int:
     return 0
 
 
+def _load_controls(scan_path: Path, config_path: Path | None, policy_path: Path | None):
+    config = load_config(discover_config(scan_path, config_path))
+    policy = load_policy(discover_policy(scan_path, policy_path))
+    return config, policy
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="agent-system")
     parser.add_argument("--audit-log", type=Path, default=Path(".agent-system/audit.jsonl"))
@@ -319,6 +388,9 @@ def main(argv=None):
     scanner.add_argument("--output", type=Path)
     scanner.add_argument("--policy", type=Path)
     scanner.add_argument("--config", type=Path)
+    scanner.add_argument("--baseline", type=Path)
+    scanner.add_argument("--new-only", action="store_true")
+    scanner.add_argument("--show-existing", action="store_true")
     scanner.add_argument("--show-suppressed", action="store_true")
 
     gate = subparsers.add_parser("guard")
@@ -342,6 +414,14 @@ def main(argv=None):
     config_command.add_argument("--init", action="store_true")
     config_command.add_argument("--force", action="store_true")
 
+    baseline_command = subparsers.add_parser("baseline")
+    baseline_command.add_argument("path", type=Path, nargs="?", default=Path(DEFAULT_BASELINE_NAME))
+    baseline_command.add_argument("--create", action="store_true")
+    baseline_command.add_argument("--scan-path", type=Path, default=Path("."))
+    baseline_command.add_argument("--policy", type=Path)
+    baseline_command.add_argument("--config", type=Path)
+    baseline_command.add_argument("--force", action="store_true")
+
     runner = subparsers.add_parser("run")
     runner.add_argument("integration")
     runner.add_argument("--approve", action="store_true")
@@ -351,14 +431,46 @@ def main(argv=None):
     root = Path(__file__).resolve().parent
 
     if args.cmd == "scan":
+        if args.baseline and not args.new_only:
+            print("Configuration error: --baseline requires --new-only", file=sys.stderr)
+            return 2
+        if args.show_existing and not args.new_only:
+            print("Configuration error: --show-existing requires --new-only", file=sys.stderr)
+            return 2
         try:
-            config = load_config(discover_config(args.path, args.config))
-            policy = load_policy(discover_policy(args.path, args.policy))
-        except (ConfigError, PolicyError) as exc:
+            config, policy = _load_controls(args.path, args.config, args.policy)
+            active, suppressed = apply_policy(scan(args.path, set(config["enabled_rules"])), policy)
+            baseline = None
+            existing = []
+            resolved = []
+            reported = active
+            if args.new_only:
+                baseline_path = discover_baseline(args.path, args.baseline)
+                if baseline_path is None:
+                    raise BaselineError(
+                        f"no {DEFAULT_BASELINE_NAME} found; create one with 'agent-system baseline --create'"
+                    )
+                baseline = load_baseline(
+                    baseline_path,
+                    expected_controls_sha256=controls_digest(config, policy),
+                )
+                reported, existing, resolved = classify_findings(active, baseline)
+        except (BaselineError, ConfigError, PolicyError) as exc:
             print(f"Configuration error: {exc}", file=sys.stderr)
             return 2
-        active, suppressed = apply_policy(scan(args.path, set(config["enabled_rules"])), policy)
-        report = render_scan(active, suppressed, policy, config, args.format, args.show_suppressed)
+
+        report = render_scan(
+            reported,
+            suppressed,
+            policy,
+            config,
+            args.format,
+            args.show_suppressed,
+            baseline=baseline,
+            existing=existing,
+            resolved=resolved,
+            show_existing=args.show_existing,
+        )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(report + "\n", encoding="utf-8")
@@ -367,16 +479,22 @@ def main(argv=None):
         append_audit(args.audit_log, "scan", {
             "path": str(args.path),
             "active": len(active),
+            "reported": len(reported),
             "suppressed": len(suppressed),
             "policy": policy.get("source"),
             "expired_suppressions": policy.get("expired_ids", []),
             "config": config.get("source"),
             "enabled_packs": config["enabled_packs"],
             "disabled_rules": config["disabled_rules"],
+            "new_only": bool(args.new_only),
+            "baseline": baseline.get("source") if baseline else None,
+            "new": len(reported) if baseline else None,
+            "existing": len(existing) if baseline else None,
+            "resolved": len(resolved) if baseline else None,
         })
         threshold_failed = any(
             SEVERITY[item["severity"]] >= SEVERITY[args.fail_on]
-            for item in active
+            for item in reported
         )
         return int(threshold_failed or bool(policy.get("expired_ids")))
 
@@ -410,6 +528,58 @@ def main(argv=None):
             "enabled_packs": config["enabled_packs"],
             "disabled_rules": config["disabled_rules"],
             "enabled_rules": config["enabled_rules"],
+        }, indent=2))
+        return 0
+
+    if args.cmd == "baseline":
+        if args.create:
+            if args.path.exists() and not args.force:
+                print(f"Refusing to overwrite existing baseline: {args.path}", file=sys.stderr)
+                return 2
+            try:
+                config, policy = _load_controls(args.scan_path, args.config, args.policy)
+            except (ConfigError, PolicyError) as exc:
+                print(f"Configuration error: {exc}", file=sys.stderr)
+                return 2
+            if policy.get("expired_ids"):
+                print("Configuration error: cannot create a baseline with expired suppressions", file=sys.stderr)
+                return 2
+            active, suppressed = apply_policy(
+                scan(args.scan_path, set(config["enabled_rules"])),
+                policy,
+            )
+            payload = build_baseline(active, config, policy, args.scan_path)
+            args.path.parent.mkdir(parents=True, exist_ok=True)
+            args.path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            append_audit(args.audit_log, "baseline-create", {
+                "path": str(args.path),
+                "scan_path": str(args.scan_path),
+                "findings": len(active),
+                "suppressed": len(suppressed),
+                "controls_sha256": payload["controls_sha256"],
+                "baseline_sha256": payload["baseline_sha256"],
+            })
+            print(json.dumps({
+                "created": str(args.path),
+                "findings": len(active),
+                "suppressed": len(suppressed),
+                "controls_sha256": payload["controls_sha256"],
+                "baseline_sha256": payload["baseline_sha256"],
+            }, indent=2))
+            return 0
+        try:
+            baseline = load_baseline(args.path)
+        except BaselineError as exc:
+            print(f"Baseline error: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({
+            "source": baseline["source"],
+            "version": baseline["version"],
+            "generated_at": baseline["generated_at"],
+            "scan_root": baseline["scan_root"],
+            "findings": len(baseline["findings"]),
+            "controls_sha256": baseline["controls_sha256"],
+            "baseline_sha256": baseline["baseline_sha256"],
         }, indent=2))
         return 0
 
