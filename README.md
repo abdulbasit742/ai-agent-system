@@ -9,6 +9,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - exact-fingerprint baselines and new-findings-only CI gates
 - Git-aware changed-file pull-request gates
 - added-line-only regression gates for low-noise reviews
+- first-party GitHub Action with annotations, job summaries, JSON, SARIF, and structured outputs
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -31,6 +32,38 @@ The root CLI works without downloading integrations. Optional pinned integration
 ```bash
 python scripts/bootstrap_integrations.py
 ```
+
+## GitHub Action
+
+A repository can run the control plane directly in a read-only pull-request workflow:
+
+```yaml
+name: agent-security
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Scan added lines
+        uses: abdulbasit742/ai-agent-system@<reviewed-commit-sha>
+        with:
+          mode: added-lines
+          fail-on: high
+          annotations: true
+```
+
+Replace the placeholder with a reviewed release or commit. The action defaults to the exact pull-request base and head commit SHAs, constrains all file inputs and outputs to `GITHUB_WORKSPACE`, removes stale reports before execution, and never places matched source previews in annotations, job summaries, or generated SARIF messages.
+
+Supported modes are `full`, `changed-files`, and `added-lines`. Outputs include status, finding counts, baseline counts, JSON report path, and SARIF path. See [docs/github-action.md](docs/github-action.md) and [examples/github-actions/security.yml.example](examples/github-actions/security.yml.example).
 
 ## Pull-request changed-file gates
 
@@ -193,6 +226,7 @@ python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
 python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
 python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
+python -m unittest discover -s tests -p "test_github_action.py" -v
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```
