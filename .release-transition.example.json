@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "identity": {
+    "allow_replay": false,
+    "allow_same_version_mutation": false,
+    "require_source_epoch_increase": true
+  },
+  "changes": {
+    "allow_module_additions": true,
+    "allow_module_removals": false,
+    "allow_module_changes": true,
+    "allow_console_script_additions": true,
+    "allow_console_script_removals": false,
+    "max_runtime_dependency_increase": 0,
+    "allow_license_changes": false
+  }
+}
