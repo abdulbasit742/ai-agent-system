@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "sequence": {"start": 1, "end": 400, "latest_completed": 30, "next_expected": 31},
+  "sequence": {"start": 1, "end": 400, "latest_completed": 31, "next_expected": 32},
   "history": [
     {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"}
   ],
@@ -60,6 +60,13 @@
       "status": "completed",
       "summary": "Added immutable exact-boundary snapshot and transition bundles for pinned receiver checkpoints, mandatory candidate-head inclusion proofs, receiver consistency binding, checksums, external pins, and offline verification without complete receiver states or loose evidence.",
       "verification": {"unit_tests": 545, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_receiver_bundles": "passed", "mandatory_candidate_head_proof": "passed", "offline_verification_without_loose_evidence": "passed", "native_receiver_evidence_serialization": "passed", "exact_file_and_checksum_boundary": "passed", "external_bundle_and_checkpoint_pins": "passed", "proof_checkpoint_and_consistency_substitution_rejection": "passed", "symlink_and_overwrite_rejection": "passed", "installed_receiver_bundle_cli": "passed", "read_only_receiver_bundle_ci": "passed", "twenty_seven_module_dependency_free_wheel": "passed", "thirty_four_installed_commands": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 31,
+      "title": "Consumer audit trust receiver bundle admission",
+      "status": "completed",
+      "summary": "Added consumer-owned canonical policies that fully verify portable receiver checkpoint bundles before applying bundle, receiver/trust identity, selected handoff, and transition controls with deterministic decisions and stable denials.",
+      "verification": {"unit_tests": 565, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_receiver_admission": "passed", "canonical_policy_hash": "passed", "deterministic_decision_id": "passed", "receiver_and_trust_identity_allowlists": "passed", "sequence_and_handoff_selection_controls": "passed", "receiver_trust_and_generation_delta_controls": "passed", "policy_outside_bundle_and_manifest_identity_recheck": "passed", "admitted_denied_invalid_exit_semantics": "passed", "installed_receiver_admission_cli": "passed", "read_only_receiver_admission_ci": "passed", "twenty_eight_module_dependency_free_wheel": "passed", "thirty_six_installed_commands": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
