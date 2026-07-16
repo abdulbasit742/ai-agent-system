@@ -41,8 +41,12 @@ All notable public distribution changes are recorded here.
 - typed archived-to-active continuity records binding segment IDs, content digests, audit heads, counts, and sizes
 - complete ordered segment-chain verification with independently retained latest-segment rollback pins
 - stable `AUS001` through `AUS008` diagnostics for unsafe paths, invalid sources, manifest drift, content tamper, continuity failures, stale pins, and empty rotation sources
-- two installed segment commands, a reviewed twelve-module wheel, and synchronized release-admission module/script boundaries
-- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, audit-integrity, event-admission, and segment artifacts with no publication, signing key, OIDC request, or registry credentials
+- canonical audit segment catalogs that auto-discover sealed archives and bind safe directory names, manifest/data digests, audit heads, counts, and continuity IDs
+- catalog generations linked by predecessor IDs with externally retained `catalog_id` freshness pins
+- exact discovery coverage and right-descendant-only synchronization that reject missing, renamed, replaced, unindexed, reordered, or forked segments
+- stable `AUC001` through `AUC010` diagnostics with distinct accepted, denied, and invalid exit semantics
+- two installed catalog commands, a reviewed thirteen-module/eight-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, audit-integrity, event-admission, segment, and catalog artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
@@ -52,7 +56,7 @@ Initial installable package release candidate.
 - full, changed-file, and added-line scanners
 - JSON and SARIF reports
 - exact-fingerprint baseline classification
-- four installed console commands: `basit-agent`, `basit-agent-lines`, `agent-system`, and `agent-changed-lines`
+- four initial installed console commands: `basit-agent`, `basit-agent-lines`, `agent-system`, and `agent-changed-lines`
 - fail-closed source-checkout boundary for external integration dispatch
 - reviewed wheel-content validation
 
