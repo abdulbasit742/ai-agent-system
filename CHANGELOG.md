@@ -65,8 +65,12 @@ All notable public distribution changes are recorded here.
 - domain-separated entry/state hashes binding bundle, checkpoint, catalog, generation, segment count, Merkle root, admission decision, policy hash, and transition delta
 - stale-pin, replay, duplicate identity, head mismatch, non-increasing generation, symlink, lock, tamper, and overwrite rejection with stable `ATS001` through `ATS010` diagnostics
 - advisory-lock-coordinated mode-0600 atomic trust-state updates that preserve bytes on denials and invalid operations
-- installed audit-bundle, admission, and trust aliases, a reviewed eighteen-module/eighteen-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable audit trust-state Merkle checkpoints binding exact state IDs, entry counts, current heads, and RFC 6962 roots
+- compact per-bundle inclusion proofs with proof-only verification and optional full portable-bundle re-verification
+- stable `ATC001` through `ATC011` diagnostics, including explicit rollback and fork lineage denials
+- immutable checkpoint/proof outputs, external freshness pins, rehashed audit-path rejection, and no signing-key or witness claims
+- installed audit-bundle, admission, trust, and trust-checkpoint aliases, a reviewed nineteen-module/twenty-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
