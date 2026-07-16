@@ -1,0 +1,119 @@
+name: Basit Agent System
+description: Secure full, changed-file, or added-line repository scanning with PR annotations and SARIF output.
+author: Abdul Basit
+
+inputs:
+  mode:
+    description: Scan mode: full, changed-files, or added-lines.
+    required: false
+    default: added-lines
+  path:
+    description: Repository-relative directory to scan.
+    required: false
+    default: .
+  fail-on:
+    description: Minimum severity that fails the action.
+    required: false
+    default: high
+  base-ref:
+    description: Base Git ref or commit. Pull requests default to the exact event base SHA.
+    required: false
+    default: ""
+  head-ref:
+    description: Head Git ref or commit. Pull requests default to the exact event head SHA.
+    required: false
+    default: ""
+  new-only:
+    description: Compare against an exact-fingerprint baseline and fail only on new findings.
+    required: false
+    default: "false"
+  baseline:
+    description: Optional repository-relative baseline path.
+    required: false
+    default: ""
+  config:
+    description: Optional repository-relative rule-pack configuration path.
+    required: false
+    default: ""
+  policy:
+    description: Optional repository-relative suppression-policy path.
+    required: false
+    default: ""
+  annotations:
+    description: Emit GitHub workflow annotations without matched source previews.
+    required: false
+    default: "true"
+  max-annotations:
+    description: Maximum annotations emitted by one step, from 0 to 50.
+    required: false
+    default: "10"
+  report-path:
+    description: Repository-relative JSON report path.
+    required: false
+    default: .agent-system/action-report.json
+  sarif-path:
+    description: Repository-relative SARIF report path.
+    required: false
+    default: .agent-system/action-results.sarif
+  python-version:
+    description: Python version used by the action.
+    required: false
+    default: "3.12"
+
+outputs:
+  status:
+    description: passed, findings, or error.
+    value: ${{ steps.scan.outputs.status }}
+  finding-count:
+    description: Number of reported findings.
+    value: ${{ steps.scan.outputs.finding-count }}
+  suppressed-count:
+    description: Number of suppressed findings.
+    value: ${{ steps.scan.outputs.suppressed-count }}
+  new-count:
+    description: Number of new findings in baseline mode.
+    value: ${{ steps.scan.outputs.new-count }}
+  existing-count:
+    description: Number of existing findings in baseline mode.
+    value: ${{ steps.scan.outputs.existing-count }}
+  resolved-count:
+    description: Number of resolved findings in baseline mode.
+    value: ${{ steps.scan.outputs.resolved-count }}
+  report-path:
+    description: Repository-relative JSON report path.
+    value: ${{ steps.scan.outputs.report-path }}
+  sarif-path:
+    description: Repository-relative SARIF report path.
+    value: ${{ steps.scan.outputs.sarif-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Run Basit Agent System
+      id: scan
+      shell: bash
+      env:
+        BASIT_MODE: ${{ inputs.mode }}
+        BASIT_PATH: ${{ inputs.path }}
+        BASIT_FAIL_ON: ${{ inputs.fail-on }}
+        BASIT_BASE_REF: ${{ inputs.base-ref }}
+        BASIT_HEAD_REF: ${{ inputs.head-ref }}
+        BASIT_NEW_ONLY: ${{ inputs.new-only }}
+        BASIT_BASELINE: ${{ inputs.baseline }}
+        BASIT_CONFIG: ${{ inputs.config }}
+        BASIT_POLICY: ${{ inputs.policy }}
+        BASIT_ANNOTATIONS: ${{ inputs.annotations }}
+        BASIT_MAX_ANNOTATIONS: ${{ inputs.max-annotations }}
+        BASIT_REPORT_PATH: ${{ inputs.report-path }}
+        BASIT_SARIF_PATH: ${{ inputs.sarif-path }}
+        BASIT_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        BASIT_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: python "$GITHUB_ACTION_PATH/scripts/github_action.py"
+
+branding:
+  icon: shield
+  color: blue
