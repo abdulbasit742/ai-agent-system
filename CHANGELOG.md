@@ -76,8 +76,11 @@ All notable public distribution changes are recorded here.
 - portable snapshot and transition audit trust handoff bundles with exact manifests, sorted checksums, external bundle/checkpoint pins, and mandatory candidate-head proofs
 - offline handoff verification after removal of complete trust states and all loose checkpoint/proof inputs
 - stable `ATB001` through `ATB012` diagnostics for unsafe paths, stale pins, invalid composition, substitution, boundary drift, and overwrite attempts
-- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, and trust-handoff aliases, a reviewed twenty-two-module/twenty-four-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- consumer-owned audit trust handoff admission policies that fully verify handoffs before applying size, proof, identity, selection, and transition controls
+- canonical policy SHA-256, deterministic decision IDs, and stable `ATA001` through `ATA016` denials
+- separate admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) trust-handoff outcomes
+- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, and trust-handoff-admission aliases, a reviewed twenty-three-module/twenty-six-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
