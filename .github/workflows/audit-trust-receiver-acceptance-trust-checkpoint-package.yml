@@ -1,0 +1,112 @@
+name: audit-trust-receiver-acceptance-trust-checkpoint-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-trust-checkpoint-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise both checkpoint aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/acceptance-trust-checkpoint-venv"
+          BIN="$RUNNER_TEMP/acceptance-trust-checkpoint-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-acceptance-trust-checkpoint"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+          ROOT="$ROOT" "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit_trust_receiver_acceptance_trust import canonical_json, create_state
+
+          root = Path(os.environ["ROOT"])
+          def h(value): return f"{value:064x}"
+          candidate = {
+              "checkpoint_id": h(101), "state_id": h(102), "entry_count": 1,
+              "merkle_root": h(103),
+              "head": {
+                  "sequence": 1, "entry_hash": h(104), "handoff_bundle_id": h(105),
+                  "checkpoint_id": h(106), "state_id": h(107), "entry_count": 1,
+                  "head_bundle_id": h(108), "generation": 1, "segment_count": 1,
+                  "trust_checkpoint_id": h(109), "trust_state_id": h(110),
+                  "trust_entry_count": 1,
+              },
+          }
+          verified = {
+              "valid": True, "bundle_id": h(90), "bundle_type": "snapshot",
+              "candidate": candidate, "previous": None, "consistency": None,
+              "files": 4, "bytes": 1000, "proof_count": 1,
+          }
+          report = {
+              "admitted": True, "policy_sha256": h(800), "decision_id": h(801),
+              "identity": {
+                  "bundle_id": verified["bundle_id"], "bundle_type": "snapshot",
+                  "candidate_acceptance_checkpoint_id": candidate["checkpoint_id"],
+                  "candidate_acceptance_state_id": candidate["state_id"],
+                  "previous_acceptance_checkpoint_id": None,
+                  "previous_acceptance_state_id": None,
+              },
+              "evidence": {
+                  "files": 4, "bytes": 1000, "proof_count": 1,
+                  "selected_sequences": [1],
+                  "selected_receiver_bundle_ids": [candidate["head"]["handoff_bundle_id"]],
+                  "candidate_acceptance_entries": 1, "candidate_receiver_entries": 1,
+                  "candidate_trust_entries": 1, "candidate_generation": 1,
+                  "candidate_segment_count": 1,
+                  "head_receiver_bundle_id": candidate["head"]["handoff_bundle_id"],
+                  "head_trust_handoff_id": candidate["head"]["head_bundle_id"],
+                  "acceptance_entry_delta": None, "receiver_entry_delta": None,
+                  "trust_entry_delta": None, "generation_delta": None,
+                  "segment_delta": None,
+              },
+              "violations": [],
+          }
+          state = create_state(report, verified)
+          (root / "state.json").write_bytes(canonical_json(state))
+          (root / "pins.json").write_text(json.dumps({
+              "state": state["state_id"], "bundle": state["head"]["handoff_bundle_id"],
+          }, sort_keys=True))
+          PY
+          STATE=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$ROOT/pins.json")
+          BUNDLE=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle"])' "$ROOT/pins.json")
+          "$BIN/basit-agent-audit-trust-receiver-acceptance-trust-checkpoint" create \
+            "$ROOT/state.json" "$ROOT/checkpoint.json" --expected-state-id "$STATE" \
+            --format json > "$ROOT/create.json"
+          CHECKPOINT=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/create.json")
+          "$BIN/agent-audit-trust-receiver-acceptance-trust-checkpoint" prove \
+            "$ROOT/state.json" "$ROOT/checkpoint.json" "$ROOT/proof.json" \
+            --expected-state-id "$STATE" --expected-checkpoint-id "$CHECKPOINT" \
+            --handoff-bundle-id "$BUNDLE" --format json > "$ROOT/prove.json"
+          rm "$ROOT/state.json"
+          "$BIN/basit-agent-audit-trust-receiver-acceptance-trust-checkpoint" verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT" --format json > "$ROOT/basit.json"
+          "$BIN/agent-audit-trust-receiver-acceptance-trust-checkpoint" verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT" --format json > "$ROOT/compat.json"
+          "$BIN/python" -c 'import json,sys; assert json.load(open(sys.argv[1]))["valid"]' "$ROOT/basit.json"
+          "$BIN/python" -c 'import json,sys; assert json.load(open(sys.argv[1]))["valid"]' "$ROOT/compat.json"
+      - name: Preserve installed checkpoint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-trust-checkpoint-package-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/installed-acceptance-trust-checkpoint/
+          if-no-files-found: warn
