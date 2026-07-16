@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from agent_baseline import (
     DEFAULT_BASELINE_NAME,
@@ -27,6 +27,7 @@ from agent_config import (
     discover_config,
     load_config,
 )
+from agent_git import GitDiffError, changed_scope, public_scope
 from agent_policy import (
     DEFAULT_POLICY_NAME,
     PolicyError,
@@ -107,23 +108,45 @@ def fingerprint(rule_id: str, path: str, line: int, evidence: str) -> str:
     return hashlib.sha256(f"{rule_id}\0{path}\0{line}\0{evidence[:100]}".encode()).hexdigest()
 
 
-def candidates(root: Path):
+def _eligible(path: Path) -> bool:
+    return path.name in SENSITIVE_FILES or path.suffix.lower() in TEXT_EXT | {".pem", ".key", ".p12", ".pfx"}
+
+
+def candidates(root: Path, include_paths: set[str] | None = None):
+    root = root.resolve()
     if root.is_file():
-        yield root
+        if include_paths is None and _eligible(root):
+            yield root
+        return
+    if include_paths is not None:
+        for relative in sorted(include_paths):
+            logical = PurePosixPath(relative)
+            path = root.joinpath(*logical.parts)
+            if path.is_file() and _eligible(path):
+                yield path
         return
     for path in root.rglob("*"):
-        if path.is_file() and not any(part in IGNORED for part in path.parts):
-            if path.name in SENSITIVE_FILES or path.suffix.lower() in TEXT_EXT | {".pem", ".key", ".p12", ".pfx"}:
-                yield path
+        if path.is_file() and not any(part in IGNORED for part in path.parts) and _eligible(path):
+            yield path
 
 
-def scan(root: Path, enabled_rule_ids: set[str] | None = None):
-    enabled = enabled_rule_ids or {"BAS000", *(rule[0] for rule in RULES)}
+def scan(
+    root: Path,
+    enabled_rule_ids: set[str] | None = None,
+    include_paths: set[str] | None = None,
+):
+    enabled = (
+        {"BAS000", *(rule[0] for rule in RULES)}
+        if enabled_rule_ids is None
+        else set(enabled_rule_ids)
+    )
     root, findings = root.resolve(), []
     base = root if root.is_dir() else root.parent
-    for path in candidates(root):
+    for path in candidates(root, include_paths):
         relative_path = path.relative_to(base).as_posix()
-        if "BAS000" in enabled and (path.name in SENSITIVE_FILES or path.suffix.lower() in {".pem", ".key", ".p12", ".pfx"}):
+        if "BAS000" in enabled and (
+            path.name in SENSITIVE_FILES or path.suffix.lower() in {".pem", ".key", ".p12", ".pfx"}
+        ):
             findings.append({
                 "rule_id": "BAS000",
                 "severity": "high",
@@ -241,6 +264,18 @@ def load_integrations(root: Path):
     return json.loads((root / "integrations.lock.json").read_text())["integrations"]
 
 
+def _scope_summary(scope: dict | None) -> dict | None:
+    if scope is None:
+        return None
+    return {
+        key: scope[key]
+        for key in (
+            "type", "base_ref", "head_ref", "base_sha", "head_sha", "merge_base_sha",
+            "changed", "current_files", "deleted", "renamed",
+        )
+    }
+
+
 def render_scan(
     findings,
     suppressed,
@@ -253,6 +288,7 @@ def render_scan(
     existing=None,
     resolved=None,
     show_existing=False,
+    scope=None,
 ):
     existing = existing or []
     resolved = resolved or []
@@ -266,14 +302,14 @@ def render_scan(
         "disabled_rules": config["disabled_rules"],
     }
     if baseline_mode:
-        summary.update({
-            "new": len(findings),
-            "existing": len(existing),
-            "resolved": len(resolved),
-        })
+        summary.update({"new": len(findings), "existing": len(existing), "resolved": len(resolved)})
+    if scope is not None:
+        summary["scope"] = _scope_summary(scope)
 
     if output_format == "json":
         payload = {"findings": findings, "summary": summary}
+        if scope is not None:
+            payload["scope"] = scope
         if show_suppressed:
             payload["suppressed"] = suppressed
         if baseline_mode:
@@ -322,9 +358,13 @@ def render_scan(
             f"Baseline: {baseline['source']}",
         ]
     else:
-        lines = [
-            f"Basit Agent System: {len(findings)} active finding(s), {len(suppressed)} suppressed",
-        ]
+        lines = [f"Basit Agent System: {len(findings)} active finding(s), {len(suppressed)} suppressed"]
+    if scope is not None:
+        lines.append(
+            f"Git scope: {scope['base_ref']}...{scope['head_ref']} — "
+            f"{scope['changed']} changed, {scope['current_files']} current, "
+            f"{scope['deleted']} deleted, {scope['renamed']} renamed"
+        )
     lines.append("Rule packs: " + ", ".join(config["enabled_packs"]))
     if config["disabled_rules"]:
         lines.append("Disabled rules: " + ", ".join(config["disabled_rules"]))
@@ -376,6 +416,14 @@ def _load_controls(scan_path: Path, config_path: Path | None, policy_path: Path 
     return config, policy
 
 
+def _baseline_for_scope(baseline: dict, paths: set[str] | None) -> dict:
+    if paths is None:
+        return baseline
+    scoped = dict(baseline)
+    scoped["findings"] = [item for item in baseline["findings"] if item["path"] in paths]
+    return scoped
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="agent-system")
     parser.add_argument("--audit-log", type=Path, default=Path(".agent-system/audit.jsonl"))
@@ -392,6 +440,8 @@ def main(argv=None):
     scanner.add_argument("--new-only", action="store_true")
     scanner.add_argument("--show-existing", action="store_true")
     scanner.add_argument("--show-suppressed", action="store_true")
+    scanner.add_argument("--changed-from")
+    scanner.add_argument("--changed-to")
 
     gate = subparsers.add_parser("guard")
     gate.add_argument("command", nargs=argparse.REMAINDER)
@@ -437,9 +487,18 @@ def main(argv=None):
         if args.show_existing and not args.new_only:
             print("Configuration error: --show-existing requires --new-only", file=sys.stderr)
             return 2
+        if args.changed_to and not args.changed_from:
+            print("Configuration error: --changed-to requires --changed-from", file=sys.stderr)
+            return 2
         try:
             config, policy = _load_controls(args.path, args.config, args.policy)
-            active, suppressed = apply_policy(scan(args.path, set(config["enabled_rules"])), policy)
+            internal_scope = None
+            include_paths = None
+            if args.changed_from:
+                internal_scope = changed_scope(args.path, args.changed_from, args.changed_to or "HEAD")
+                include_paths = set(internal_scope["_scan_paths"])
+            raw_findings = scan(args.path, set(config["enabled_rules"]), include_paths)
+            active, suppressed = apply_policy(raw_findings, policy)
             baseline = None
             existing = []
             resolved = []
@@ -454,11 +513,20 @@ def main(argv=None):
                     baseline_path,
                     expected_controls_sha256=controls_digest(config, policy),
                 )
-                reported, existing, resolved = classify_findings(active, baseline)
-        except (BaselineError, ConfigError, PolicyError) as exc:
+                baseline_paths = (
+                    set(internal_scope["_baseline_paths"])
+                    if internal_scope is not None
+                    else None
+                )
+                reported, existing, resolved = classify_findings(
+                    active,
+                    _baseline_for_scope(baseline, baseline_paths),
+                )
+        except (BaselineError, ConfigError, GitDiffError, PolicyError) as exc:
             print(f"Configuration error: {exc}", file=sys.stderr)
             return 2
 
+        report_scope = public_scope(internal_scope) if internal_scope is not None else None
         report = render_scan(
             reported,
             suppressed,
@@ -470,6 +538,7 @@ def main(argv=None):
             existing=existing,
             resolved=resolved,
             show_existing=args.show_existing,
+            scope=report_scope,
         )
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -491,6 +560,7 @@ def main(argv=None):
             "new": len(reported) if baseline else None,
             "existing": len(existing) if baseline else None,
             "resolved": len(resolved) if baseline else None,
+            "scope": _scope_summary(report_scope),
         })
         threshold_failed = any(
             SEVERITY[item["severity"]] >= SEVERITY[args.fail_on]

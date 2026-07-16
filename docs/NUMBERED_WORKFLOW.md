@@ -18,3 +18,4 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 
 - Task 1 introduced configurable scanner rule packs with a mandatory, non-disableable core security baseline.
 - Task 2 introduced exact-fingerprint repository baselines and new-findings-only CI gating with integrity and control-scope validation.
+- Task 3 introduced Git-aware merge-base changed-file gates with safe path parsing and changed-scope baseline classification.

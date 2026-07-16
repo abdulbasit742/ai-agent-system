@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 2,
-    "next_expected": 3
+    "latest_completed": 3,
+    "next_expected": 4
   },
   "completed": [
     {
@@ -32,6 +32,23 @@
         "baseline_creation": "passed",
         "new_only_existing_findings": "passed",
         "new_high_regression_gate": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 3,
+      "title": "Git-aware changed-file gate",
+      "status": "completed",
+      "summary": "Added merge-base changed-file scanning with safe Git ref resolution, NUL-delimited path parsing, repository-bound path validation, and baseline classification limited to the changed scope.",
+      "verification": {
+        "unit_tests": 43,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "git_scope_model": "passed",
+        "changed_file_cli": "passed",
+        "unchanged_legacy_exclusion": "passed",
+        "deleted_and_renamed_baseline_scope": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

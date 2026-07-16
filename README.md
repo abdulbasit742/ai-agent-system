@@ -7,6 +7,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - repository, MCP, workflow, prompt, secret, and autonomy-boundary scanning
 - configurable rule packs with mandatory core protections
 - exact-fingerprint baselines and new-findings-only CI gates
+- Git-aware changed-file pull-request gates
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -29,6 +30,31 @@ The root CLI works without downloading integrations. Optional pinned integration
 ```bash
 python scripts/bootstrap_integrations.py
 ```
+
+## Pull-request changed-file gates
+
+Scan only files changed from a reviewed base reference to `HEAD`:
+
+```bash
+python agent_system.py scan . \
+  --changed-from origin/main \
+  --format json \
+  --fail-on high
+```
+
+Combine the Git scope with an existing baseline so only new findings in changed files fail:
+
+```bash
+python agent_system.py scan . \
+  --changed-from origin/main \
+  --new-only \
+  --format sarif \
+  --output agent-system.sarif
+```
+
+The system resolves refs to commit SHAs, calculates a merge-base diff, parses NUL-delimited paths, and fails closed for missing history, invalid refs, malformed output, or paths escaping the repository. Deleted and renamed paths participate in scoped baseline resolution without being read from disk.
+
+See [docs/changed-file-gating.md](docs/changed-file-gating.md).
 
 ## Baseline adoption for existing repositories
 
@@ -134,7 +160,7 @@ Development is tracked as an ordered 1-to-400 sequence. Every number must preser
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
