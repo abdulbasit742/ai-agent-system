@@ -33,14 +33,17 @@ Issues = "https://github.com/abdulbasit742/ai-agent-system/issues"
 [project.scripts]
 basit-agent = "agent_cli:main"
 basit-agent-lines = "agent_cli:changed_lines_main"
+basit-agent-segments = "agent_audit_segments:main"
 agent-system = "agent_cli:main"
 agent-changed-lines = "agent_cli:changed_lines_main"
+agent-audit-segments = "agent_audit_segments:main"
 
 [tool.setuptools]
 include-package-data = false
 py-modules = [
   "agent_audit",
   "agent_audit_events",
+  "agent_audit_segments",
   "agent_baseline",
   "agent_changed_lines",
   "agent_cli",
