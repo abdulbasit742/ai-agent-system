@@ -25,8 +25,14 @@ jobs:
         run: python -m unittest discover -s tests -p "test_agent_config.py" -v
       - name: Test baseline model
         run: python -m unittest discover -s tests -p "test_agent_baseline.py" -v
-      - name: Test baseline CLI
-        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -v
+      - name: Test baseline CLI existing finding
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k existing_high -v
+      - name: Test baseline CLI new regression
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k new_high -v
+      - name: Test baseline CLI scope mismatch
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k changed_rule_scope -v
+      - name: Test baseline CLI overwrite protection
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k refuses_overwrite -v
       - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
