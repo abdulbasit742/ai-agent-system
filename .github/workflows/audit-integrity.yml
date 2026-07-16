@@ -18,7 +18,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Test strict audit log controls
-        run: python -m unittest discover -s tests -p "test_agent_audit.py" -v
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_agent_audit.py" -v \
+            > "$RUNNER_TEMP/audit-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            grep -E '^(FAIL|ERROR):|^Traceback|AssertionError|^Ran |^FAILED' \
+              "$RUNNER_TEMP/audit-tests.log" || cat "$RUNNER_TEMP/audit-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-tests.log"
       - name: Compile audit runtime
         run: python -m compileall -q agent_audit.py agent_system.py agent_system_legacy.py tests/test_agent_audit.py
 
