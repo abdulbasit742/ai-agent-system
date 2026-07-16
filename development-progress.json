@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 36,
-    "next_expected": 37
+    "latest_completed": 37,
+    "next_expected": 38
   },
   "prior_history": {
     "start": 1,
@@ -27,6 +27,31 @@
         "installed_aliases": "passed",
         "dependency_free_modules": 33,
         "installed_commands": 46,
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 37,
+      "title": "Pinned receiver-acceptance bundle trust state",
+      "status": "completed",
+      "summary": "Added a consumer-owned canonical trust state that anchors admitted receiver-acceptance snapshot bundles and atomically advances through admitted transitions with exact acceptance and nested receiver continuity, replay protection, and external freshness pins.",
+      "verification": {
+        "unit_tests": 685,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "isolated_acceptance_trust_adapter": "passed",
+        "snapshot_anchor_and_transition_advance": "passed",
+        "canonical_hash_chained_trust_state": "passed",
+        "external_state_pin": "passed",
+        "acceptance_and_nested_receiver_head_binding": "passed",
+        "replay_rollback_and_nonadvancing_rejection": "passed",
+        "denied_and_invalid_byte_immutability": "passed",
+        "mode_0600_atomic_locked_updates": "passed",
+        "installed_acceptance_trust_cli": "passed",
+        "read_only_acceptance_trust_ci": "passed",
+        "dependency_free_modules": 34,
+        "installed_commands": 48,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
