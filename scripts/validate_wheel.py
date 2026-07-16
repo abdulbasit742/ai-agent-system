@@ -21,6 +21,7 @@ EXPECTED_NAME = "basit-agent-system"
 EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
     "agent_audit.py",
+    "agent_audit_catalog.py",
     "agent_audit_events.py",
     "agent_audit_segments.py",
     "agent_baseline.py",
@@ -34,10 +35,12 @@ EXPECTED_MODULES = {
     "agent_version.py",
 }
 EXPECTED_SCRIPTS = {
+    "agent-audit-catalog": "agent_audit_catalog:main",
     "agent-audit-segments": "agent_audit_segments:main",
     "agent-changed-lines": "agent_cli:changed_lines_main",
     "agent-system": "agent_cli:main",
     "basit-agent": "agent_cli:main",
+    "basit-agent-catalog": "agent_audit_catalog:main",
     "basit-agent-lines": "agent_cli:changed_lines_main",
     "basit-agent-segments": "agent_audit_segments:main",
 }
