@@ -51,6 +51,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_wheel_validator.py" -v
       - name: Test reproducible release bundles
         run: python -m unittest discover -s tests -p "test_release_bundle.py" -v
+      - name: Test SBOM and provenance evidence
+        run: python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
       - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
@@ -177,7 +179,7 @@ jobs:
             --source-date-epoch "${{ steps.source.outputs.epoch }}"
       - name: Verify release evidence bundle
         run: python scripts/release_bundle.py verify release
-      - name: Validate manifest source identity
+      - name: Validate manifest, SBOM, and provenance identity
         env:
           EXPECTED_COMMIT: ${{ github.sha }}
           EXPECTED_EPOCH: ${{ steps.source.outputs.epoch }}
@@ -188,10 +190,22 @@ jobs:
           from pathlib import Path
 
           manifest = json.loads(Path('release/release-manifest.json').read_text())
+          assert manifest['manifest_version'] == 2
           assert manifest['source']['commit'] == os.environ['EXPECTED_COMMIT'].lower()
           assert manifest['source']['source_date_epoch'] == int(os.environ['EXPECTED_EPOCH'])
           assert len(manifest['release_id']) == 64
           assert len(manifest['artifacts']) == 1
+
+          artifact = manifest['artifacts'][0]
+          assert set(artifact['evidence']) == {'sbom', 'provenance'}
+          sbom = json.loads(Path('release', artifact['evidence']['sbom']['filename']).read_text())
+          provenance = json.loads(Path('release', artifact['evidence']['provenance']['filename']).read_text())
+          assert sbom['spdxVersion'] == 'SPDX-2.3'
+          assert len(sbom['files']) == artifact['modules']
+          assert provenance['_type'] == 'https://in-toto.io/Statement/v1'
+          assert provenance['predicateType'] == 'https://slsa.dev/provenance/v1'
+          assert provenance['subject'][0]['name'] == artifact['filename']
+          assert provenance['subject'][0]['digest']['sha256'] == artifact['sha256']
           PY
       - name: Preserve verified release evidence
         uses: actions/upload-artifact@v4
