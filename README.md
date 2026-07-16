@@ -11,12 +11,14 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - first-party GitHub Action with JSON, SARIF, annotations, summaries, and structured outputs
 - installable dependency-free Python package with an exact reviewed wheel boundary
 - strict canonical audit chains with external freshness pins and safe recovery copies
-- versioned typed audit events with privacy-preserving path, command, and Git-ref references
-- atomic audit segment rotation, canonical catalogs, Merkle checkpoints, inclusion proofs, and compact consistency proofs
+- typed privacy-safe audit events
+- atomic audit segment rotation and canonical segment catalogs
+- portable catalog Merkle checkpoints, inclusion proofs, and compact consistency proofs
 - portable snapshot and transition audit evidence bundles
-- consumer-owned audit bundle admission policies with deterministic decisions
+- consumer-owned audit bundle admission policies
+- pinned, hash-chained audit bundle trust states
 - reproducible release bundles with deterministic SPDX SBOM and in-toto/SLSA-style provenance
-- consumer release-admission policies, verified transition gates, pinned trust states, release checkpoints, and consistency proofs
+- release admission, transition, trust-state, checkpoint, and consistency controls
 - destructive-command policy gate and dry-run-first integration dispatcher
 - credential, PII, and prompt-marker redaction
 - versioned suppression policies with ownership, justification, and expiration
@@ -74,6 +76,9 @@ basit-agent-audit-admission evaluate audit-handoff \
   --policy audit-admission.json \
   --expected-bundle-id "$BUNDLE_ID" \
   --expected-candidate-checkpoint-id "$CHECKPOINT_ID"
+basit-agent-audit-trust verify audit-trust-state.json \
+  --expected-state-id "$STATE_ID" \
+  --bundle current-head-bundle
 ```
 
 Compatibility aliases are:
@@ -86,8 +91,9 @@ Compatibility aliases are:
 - `agent-audit-catalog-consistency`
 - `agent-audit-bundle`
 - `agent-audit-admission`
+- `agent-audit-trust`
 
-The wheel has no runtime dependencies and contains only the seventeen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, admission decisions, reports, tests, integrations, and generated evidence never enter the wheel.
+The wheel has no runtime dependencies and contains only the eighteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, decisions, trust states, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
 
 Installed-wheel `doctor` and integration `run` fail closed because external integrations remain source-checkout-only.
 
@@ -134,22 +140,21 @@ python agent_system.py audit --path .agent-system/audit.jsonl --require-typed --
 
 See [docs/audit-event-admission.md](docs/audit-event-admission.md) and [docs/security-audit-event-admission.md](docs/security-audit-event-admission.md).
 
-## Audit segment rotation and catalogs
+## Audit segments and catalogs
 
 ```bash
 basit-agent-segments rotate \
   --path .agent-system/audit.jsonl \
   --output-dir audit-archive/0001 \
   --expected-records "$EXPECTED_RECORDS" \
-  --expected-head "$EXPECTED_HEAD" \
-  --format json
+  --expected-head "$EXPECTED_HEAD"
 
 basit-agent-catalog init audit-archive/catalog.json \
-  --active .agent-system/audit.jsonl --format json
+  --active .agent-system/audit.jsonl
 
 basit-agent-catalog sync audit-archive/catalog.json \
   --expected-catalog-id "$CATALOG_ID" \
-  --active .agent-system/audit.jsonl --format json
+  --active .agent-system/audit.jsonl
 ```
 
 Every archive contains exact `segment.jsonl` bytes and a canonical `manifest.json`. Catalog synchronization accepts only an exact right-descendant extension of the externally pinned catalog.
@@ -162,18 +167,18 @@ See [docs/audit-segment-rotation.md](docs/audit-segment-rotation.md), [docs/audi
 basit-agent-catalog-checkpoint create \
   audit-archive/catalog.json audit-catalog-checkpoint.json \
   --expected-catalog-id "$CATALOG_ID" \
-  --active .agent-system/audit.jsonl --format json
+  --active .agent-system/audit.jsonl
 
 basit-agent-catalog-checkpoint prove \
   audit-archive/catalog.json audit-catalog-checkpoint.json segment-proof.json \
   --expected-catalog-id "$CATALOG_ID" \
   --expected-checkpoint-id "$CHECKPOINT_ID" \
-  --segment-index 12 --format json
+  --segment-index 12
 
 agent-audit-catalog-checkpoint verify-proof \
   segment-proof.json audit-catalog-checkpoint.json \
   --expected-checkpoint-id "$CHECKPOINT_ID" \
-  --segment-dir audit-archive/segment-0012 --format json
+  --segment-dir audit-archive/segment-0012
 ```
 
 See [docs/audit-catalog-checkpoints.md](docs/audit-catalog-checkpoints.md) and [docs/security-audit-catalog-checkpoints.md](docs/security-audit-catalog-checkpoints.md).
@@ -191,13 +196,6 @@ basit-agent-catalog-consistency prove \
   --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
   --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
   --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
-
-agent-audit-catalog-consistency verify \
-  catalog-consistency.json retained-checkpoint.json candidate-checkpoint.json \
-  --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
-  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
-  --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
-  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
 ```
 
 Stable denials are `AUK009` rollback, `AUK010` fork/predecessor mismatch, and `AUK011` generation regression.
@@ -206,7 +204,7 @@ See [docs/audit-catalog-consistency.md](docs/audit-catalog-consistency.md) and [
 
 ## Portable audit evidence bundles
 
-A snapshot bundle packages a pinned candidate checkpoint and one or more inclusion proofs. A transition bundle also packages a pinned previous checkpoint and a consistency proof. Selected sealed segments may be included after independent proof-to-directory verification.
+A snapshot bundle packages a pinned candidate checkpoint and inclusion proofs. A transition bundle additionally packages a pinned previous checkpoint and consistency proof. Selected sealed segments may be copied after proof-to-directory verification.
 
 ```bash
 basit-agent-audit-bundle create audit-handoff \
@@ -232,30 +230,60 @@ See [docs/audit-evidence-bundles.md](docs/audit-evidence-bundles.md) and [docs/s
 
 ## Consumer audit bundle admission
 
-Bundle verification proves integrity; admission determines whether that verified evidence satisfies consumer policy. The policy must remain outside the bundle.
+Bundle verification proves integrity; admission decides whether verified evidence satisfies consumer policy. The policy must remain outside the bundle.
 
 ```bash
 basit-agent-audit-admission init audit-admission.json
-agent-audit-admission validate audit-admission.json --format json
+agent-audit-admission validate audit-admission.json
 
 basit-agent-audit-admission evaluate audit-handoff \
   --policy audit-admission.json \
   --expected-bundle-id "$BUNDLE_ID" \
-  --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
-  --format json
+  --expected-candidate-checkpoint-id "$CHECKPOINT_ID"
 ```
 
 Transition evaluation also requires `--expected-previous-checkpoint-id`.
 
-Exit codes:
-
-- `0`: fully verified and admitted
-- `1`: fully verified but denied by policy
-- `2`: malformed policy, unsafe input, stale pin, or unverifiable bundle
-
-The decision includes a canonical policy SHA-256, deterministic decision ID, evidence counts, selected segment identities, and stable `AUA001`–`AUA016` diagnostics. These values are unsigned integrity commitments, not authenticated identities or signatures.
+Exit codes are `0` admitted, `1` fully verified but denied, and `2` malformed, unsafe, stale-pinned, or unverifiable. Decisions include canonical policy hashes, deterministic decision IDs, evidence summaries, and `AUA001`–`AUA016` diagnostics.
 
 See [docs/audit-bundle-admission.md](docs/audit-bundle-admission.md) and [docs/security-audit-bundle-admission.md](docs/security-audit-bundle-admission.md).
+
+## Pinned audit bundle trust state
+
+A trust state turns admitted bundles into persistent consumer-owned history. Initialization accepts only an admitted snapshot. Advancement accepts only an admitted transition whose previous checkpoint and catalog equal the current head.
+
+Initialize and retain the returned `state_id` separately:
+
+```bash
+basit-agent-audit-trust init audit-trust-state.json snapshot-bundle \
+  --policy audit-admission.json \
+  --expected-bundle-id "$BUNDLE_ID" \
+  --expected-candidate-checkpoint-id "$CHECKPOINT_ID"
+```
+
+Verify the state and optional current-head bundle:
+
+```bash
+agent-audit-trust verify audit-trust-state.json \
+  --expected-state-id "$STATE_ID" \
+  --bundle current-head-bundle
+```
+
+Advance through an admitted transition:
+
+```bash
+basit-agent-audit-trust advance audit-trust-state.json transition-bundle \
+  --policy audit-admission.json \
+  --expected-state-id "$STATE_ID" \
+  --expected-bundle-id "$CANDIDATE_BUNDLE_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+```
+
+Each entry binds bundle/checkpoint/catalog identity, generation, segment count, Merkle root, admission decision ID, policy hash, predecessor evidence, and a domain-separated hash. Stale pins, policy denials, replay, head mismatch, or generation rollback leave state bytes unchanged.
+
+Exit codes are `0` created/verified/advanced, `1` verified evidence denied or rejected as replay/head mismatch, and `2` malformed, unsafe, stale-pinned, or unverifiable input. Stable diagnostics are `ATS001`–`ATS010`.
+
+See [docs/audit-bundle-trust-state.md](docs/audit-bundle-trust-state.md) and [docs/security-audit-bundle-trust-state.md](docs/security-audit-bundle-trust-state.md).
 
 ## Pull-request change gates
 
