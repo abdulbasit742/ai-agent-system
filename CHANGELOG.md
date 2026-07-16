@@ -13,7 +13,10 @@ All notable public distribution changes are recorded here.
 - evidence digests, media types, and sizes bound into release manifest schema version 2
 - semantic evidence regeneration that rejects modified SBOM/provenance even after manifest and checksum rewriting
 - fail-closed bundle verification for tampering, extra files, symlinks, malformed checksums, and metadata drift
-- read-only CI release-readiness artifacts with no publication, signing key, OIDC request, or registry credentials
+- versioned consumer release-admission policies with canonical policy hashes and stable `ADMxxx` denial rules
+- exact expected commit, version, optional release-ID, module, command, dependency, license, checksum, SBOM, and provenance admission constraints
+- distinct admitted (`0`), denied (`1`), and malformed/unverifiable (`2`) exit semantics
+- read-only CI release-readiness and admission artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
