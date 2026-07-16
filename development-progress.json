@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "sequence": {"start": 1, "end": 400, "latest_completed": 26, "next_expected": 27},
+  "sequence": {"start": 1, "end": 400, "latest_completed": 27, "next_expected": 28},
   "history": [
     {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"}
   ],
@@ -32,6 +32,13 @@
       "status": "completed",
       "summary": "Added consumer-owned canonical policies that fully verify audit trust handoffs before applying bundle, candidate identity, proof selection, and transition constraints with deterministic decisions and stable denials.",
       "verification": {"unit_tests": 465, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_and_transition_admission": "passed", "canonical_policy_hash": "passed", "deterministic_decision_id": "passed", "candidate_state_checkpoint_and_head_allowlists": "passed", "sequence_and_bundle_selection_controls": "passed", "entry_and_generation_delta_controls": "passed", "admitted_denied_invalid_exit_semantics": "passed", "installed_trust_admission_cli": "passed", "read_only_trust_admission_ci": "passed", "twenty_three_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 27,
+      "title": "Pinned audit trust receiver state",
+      "status": "completed",
+      "summary": "Added a consumer-owned canonical receiver state that anchors admitted snapshot handoffs and atomically advances through admitted transition handoffs with exact retained-head binding, replay protection, external freshness pins, and immutable denial behavior.",
+      "verification": {"unit_tests": 485, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_anchor_and_transition_advance": "passed", "canonical_hash_chained_receiver_state": "passed", "external_receiver_state_pin": "passed", "handoff_admission_and_identity_binding": "passed", "retained_checkpoint_state_and_entry_count_binding": "passed", "replay_rollback_and_nonadvancing_rejection": "passed", "denied_and_invalid_byte_immutability": "passed", "mode_0600_atomic_locked_updates": "passed", "installed_trust_receiver_cli": "passed", "read_only_trust_receiver_ci": "passed", "twenty_four_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
