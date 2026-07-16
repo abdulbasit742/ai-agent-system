@@ -97,8 +97,12 @@ All notable public distribution changes are recorded here.
 - consumer-owned receiver checkpoint bundle admission policies that verify complete bundles before applying type, size, proof, receiver/trust identity, selection, and transition controls
 - canonical receiver admission policy hashes, deterministic decision IDs, policy-outside-bundle enforcement, manifest identity rechecks, and stable `ARA001` through `ARA016` denials
 - separate admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) receiver-bundle outcomes
-- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, trust-receiver, receiver-checkpoint, receiver-consistency, receiver-bundle, and receiver-admission aliases, a reviewed twenty-eight-module/thirty-six-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver/receiver-checkpoint/receiver-consistency/receiver-bundle/receiver-admission, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- consumer-owned pinned receiver-bundle acceptance states with snapshot-only anchors, transition-only advancement, and externally retained acceptance `state_id` freshness pins
+- exact receiver checkpoint/state/count and underlying trust checkpoint/state/count predecessor binding with receiver, trust-entry, and generation delta verification
+- stable `ARS001` through `ARS010` diagnostics for unsafe paths, stale pins, admission denials, wrong roles, head mismatch, replay, rollback, non-advancement, and lock failures
+- lock-coordinated mode-0600 atomic acceptance-state updates that preserve bytes on denied and invalid operations
+- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, trust-receiver, receiver-checkpoint, receiver-consistency, receiver-bundle, receiver-admission, and receiver-acceptance aliases, a reviewed twenty-nine-module/thirty-eight-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver/receiver-checkpoint/receiver-consistency/receiver-bundle/receiver-admission/receiver-acceptance, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 

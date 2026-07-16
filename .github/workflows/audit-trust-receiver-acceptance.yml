@@ -1,0 +1,173 @@
+name: audit-trust-receiver-acceptance
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  receiver-acceptance-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test receiver acceptance state
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance.py" -v
+      - name: Re-run receiver bundle and admission regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_bundle.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_admission.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance.py tests/test_audit_trust_receiver_acceptance.py
+
+  receiver-acceptance-integration:
+    runs-on: ubuntu-latest
+    env:
+      ROOT: ${{ runner.temp }}/audit-trust-receiver-acceptance
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Generate receiver checkpoint bundles
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit_trust_receiver import append_transition, canonical_json, create_state
+          from agent_audit_trust_receiver_admission import canonical_json as policy_json
+          from agent_audit_trust_receiver_admission import default_policy
+          from agent_audit_trust_receiver_bundle import create_bundle
+          from agent_audit_trust_receiver_checkpoint import create_checkpoint, create_proof
+          from agent_audit_trust_receiver_consistency import create_consistency_proof
+
+          root = Path(os.environ["ROOT"])
+          def h(value): return f"{value:064x}"
+          def verified(base, bundle_type, trust_entries, generation, segments, previous=None):
+              candidate = {
+                  "checkpoint_id": h(base + 1), "state_id": h(base + 2),
+                  "entry_count": trust_entries, "merkle_root": h(base + 3),
+                  "head": {
+                      "entry_hash": h(base + 4), "bundle_id": h(base + 5),
+                      "checkpoint_id": h(base + 6), "catalog_id": h(base + 7),
+                      "generation": generation, "segment_count": segments,
+                  },
+              }
+              return {
+                  "valid": True, "bundle_id": h(base), "bundle_type": bundle_type,
+                  "candidate": candidate, "previous": previous,
+                  "consistency": None if previous is None else {
+                      "relation": "right-descendant", "consistency_id": h(base + 8),
+                  },
+                  "files": 4 if previous is None else 7,
+                  "bytes": 1000 if previous is None else 2000, "proof_count": 1,
+              }
+          def admission(item, decision):
+              candidate, previous = item["candidate"], item["previous"]
+              return {
+                  "admitted": True, "policy_sha256": h(7000 + decision),
+                  "decision_id": h(8000 + decision),
+                  "identity": {
+                      "bundle_id": item["bundle_id"], "bundle_type": item["bundle_type"],
+                      "candidate_checkpoint_id": candidate["checkpoint_id"],
+                      "candidate_state_id": candidate["state_id"],
+                      "previous_checkpoint_id": previous["checkpoint_id"] if previous else None,
+                      "previous_state_id": previous["state_id"] if previous else None,
+                  },
+                  "evidence": {
+                      "candidate_entry_count": candidate["entry_count"],
+                      "candidate_generation": candidate["head"]["generation"],
+                      "candidate_segment_count": candidate["head"]["segment_count"],
+                      "head_bundle_id": candidate["head"]["bundle_id"],
+                      "entry_delta": candidate["entry_count"] - previous["entry_count"] if previous else None,
+                      "generation_delta": candidate["head"]["generation"] - previous["head"]["generation"] if previous else None,
+                  },
+                  "violations": [],
+              }
+          first = verified(1000, "snapshot", 1, 1, 1)
+          state1 = create_state(admission(first, 1), first)
+          second = verified(2000, "transition", 2, 2, 2, first["candidate"])
+          state2 = append_transition(state1, admission(second, 2), second)
+          cp1, cp2 = create_checkpoint(state1), create_checkpoint(state2)
+          proof1 = create_proof(state1, cp1, sequence=1)
+          proof2 = create_proof(state2, cp2, sequence=2)
+          consistency = create_consistency_proof(state1, cp1, state2, cp2)
+          for name, payload in {"cp1.json": cp1, "cp2.json": cp2, "proof1.json": proof1,
+                                "proof2.json": proof2, "consistency.json": consistency}.items():
+              (root / name).write_bytes(canonical_json(payload))
+          snapshot = create_bundle(root / "snapshot-bundle", root / "cp1.json",
+                                   cp1["checkpoint_id"], [root / "proof1.json"])
+          transition = create_bundle(
+              root / "transition-bundle", root / "cp2.json", cp2["checkpoint_id"],
+              [root / "proof2.json"], previous_checkpoint_path=root / "cp1.json",
+              expected_previous_checkpoint_id=cp1["checkpoint_id"],
+              consistency_path=root / "consistency.json",
+          )
+          (root / "policy.json").write_bytes(policy_json(default_policy()))
+          (root / "pins.json").write_text(json.dumps({
+              "snapshot_bundle": snapshot["bundle_id"], "snapshot_checkpoint": cp1["checkpoint_id"],
+              "transition_bundle": transition["bundle_id"], "transition_checkpoint": cp2["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+      - name: Anchor acceptance state
+        run: |
+          set -euo pipefail
+          SNAPSHOT_BUNDLE=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["snapshot_bundle"])')
+          SNAPSHOT_CHECKPOINT=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["snapshot_checkpoint"])')
+          python agent_audit_trust_receiver_acceptance.py init "$ROOT/acceptance.json" "$ROOT/snapshot-bundle" \
+            --policy "$ROOT/policy.json" --expected-bundle-id "$SNAPSHOT_BUNDLE" \
+            --expected-candidate-checkpoint-id "$SNAPSHOT_CHECKPOINT" --format json > "$ROOT/init.json"
+      - name: Advance acceptance state
+        run: |
+          set -euo pipefail
+          STATE1=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/init.json"))["state_id"])')
+          TRANSITION_BUNDLE=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["transition_bundle"])')
+          TRANSITION_CHECKPOINT=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["transition_checkpoint"])')
+          python agent_audit_trust_receiver_acceptance.py advance "$ROOT/acceptance.json" "$ROOT/transition-bundle" \
+            --policy "$ROOT/policy.json" --expected-state-id "$STATE1" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" --format json > "$ROOT/advance.json"
+      - name: Verify accepted head
+        run: |
+          set -euo pipefail
+          STATE2=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/advance.json"))["state_id"])')
+          python agent_audit_trust_receiver_acceptance.py verify "$ROOT/acceptance.json" \
+            --expected-state-id "$STATE2" --bundle "$ROOT/transition-bundle" --format json > "$ROOT/verify.json"
+      - name: Reject stale pin and replay without mutation
+        run: |
+          set -euo pipefail
+          STATE2=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/advance.json"))["state_id"])')
+          TRANSITION_BUNDLE=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["transition_bundle"])')
+          TRANSITION_CHECKPOINT=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["transition_checkpoint"])')
+          cp "$ROOT/acceptance.json" "$ROOT/before-replay.json"
+          set +e
+          python agent_audit_trust_receiver_acceptance.py advance "$ROOT/acceptance.json" "$ROOT/transition-bundle" \
+            --policy "$ROOT/policy.json" --expected-state-id "$STATE2" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" --format json \
+            > "$ROOT/replay.json" 2> "$ROOT/replay-error.json"
+          REPLAY=$?
+          python agent_audit_trust_receiver_acceptance.py verify "$ROOT/acceptance.json" \
+            --expected-state-id "$(printf 'f%.0s' {1..64})" --format json \
+            > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          set -e
+          test "$REPLAY" -eq 2
+          test "$STALE" -eq 1
+          cmp "$ROOT/before-replay.json" "$ROOT/acceptance.json"
+      - name: Preserve acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver-acceptance/
+          if-no-files-found: warn
