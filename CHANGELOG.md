@@ -69,8 +69,12 @@ All notable public distribution changes are recorded here.
 - compact per-bundle inclusion proofs with proof-only verification and optional full portable-bundle re-verification
 - stable `ATC001` through `ATC011` diagnostics, including explicit rollback and fork lineage denials
 - immutable checkpoint/proof outputs, external freshness pins, rehashed audit-path rejection, and no signing-key or witness claims
-- installed audit-bundle, admission, trust, and trust-checkpoint aliases, a reviewed nineteen-module/twenty-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- compact append-only audit trust consistency proofs with canonical aligned frontiers and independent retained/candidate root reconstruction
+- authenticated first-appended transition entries binding retained head hash, checkpoint, catalog, and generation continuity
+- stable `ATK009` rollback, `ATK010` fork, and `ATK011` invalid-boundary denials that never create proof artifacts
+- proof-only consistency verification after removal of both complete trust states
+- installed audit-bundle, admission, trust, trust-checkpoint, and trust-consistency aliases, a reviewed twenty-module/twenty-two-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
