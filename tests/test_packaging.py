@@ -71,6 +71,7 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertEqual(
             {
+                "agent-audit-bundle",
                 "agent-audit-catalog",
                 "agent-audit-catalog-checkpoint",
                 "agent-audit-catalog-consistency",
@@ -78,6 +79,7 @@ class PackagingTests(unittest.TestCase):
                 "agent-changed-lines",
                 "agent-system",
                 "basit-agent",
+                "basit-agent-audit-bundle",
                 "basit-agent-catalog",
                 "basit-agent-catalog-checkpoint",
                 "basit-agent-catalog-consistency",
@@ -89,6 +91,7 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(
             {
                 "agent_audit",
+                "agent_audit_bundle",
                 "agent_audit_catalog",
                 "agent_audit_checkpoint",
                 "agent_audit_consistency",
