@@ -1,0 +1,94 @@
+name: audit-segments
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  segment-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test audit segment rotation
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_segments.py" -v \
+            > "$RUNNER_TEMP/audit-segment-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 160 "$RUNNER_TEMP/audit-segment-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-segment-tests.log"
+      - name: Re-run audit integrity and event admission
+        run: |
+          python -m unittest discover -s tests -p "test_agent_audit.py" -v
+          python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
+          python -m unittest discover -s tests -p "test_added_line_gate.py" -v
+      - name: Compile segment runtime
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_system.py tests/test_audit_segments.py
+      - name: Preserve segment test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-segment-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-segment-tests.log
+          if-no-files-found: warn
+
+  segment-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Rotate and verify two audit segments
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-segments"
+          ACTIVE="$ROOT/active.jsonl"
+          mkdir -p "$ROOT"
+          python agent_system.py --audit-log "$ACTIVE" scan . \
+            --format json --fail-on high --output "$ROOT/scan-one.json"
+          python agent_audit_segments.py rotate \
+            --path "$ACTIVE" --output-dir "$ROOT/0001" --format json \
+            > "$ROOT/rotate-one.json"
+          python agent_system.py --audit-log "$ACTIVE" guard python -m unittest \
+            > "$ROOT/guard.json"
+          python agent_audit_segments.py rotate \
+            --path "$ACTIVE" --output-dir "$ROOT/0002" --format json \
+            > "$ROOT/rotate-two.json"
+          LATEST=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["segment_id"])' "$ROOT/rotate-two.json")
+          python agent_audit_segments.py verify "$ROOT/0001" "$ROOT/0002" \
+            --active "$ACTIVE" --expected-latest-segment-id "$LATEST" --format json \
+            > "$ROOT/verify.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-segments'
+          report = json.loads((root / 'verify.json').read_text())
+          assert report['valid'] is True
+          assert report['segment_count'] == 2
+          assert report['segments'][0]['segment_index'] == 1
+          assert report['segments'][1]['segment_index'] == 2
+          assert report['segments'][1]['previous_segment_id'] == report['segments'][0]['segment_id']
+          assert report['active']['privacy_safe'] is True
+          assert report['latest_segment_id'] == report['expected_latest_segment_id']
+          PY
+      - name: Preserve verified segment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-segments-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-segments/
+          if-no-files-found: error
