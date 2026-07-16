@@ -1,0 +1,79 @@
+name: audit-evidence-bundle-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  bundle-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise bundle aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/bundle-venv"
+          BIN="$RUNNER_TEMP/bundle-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-bundle"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/python" - <<'PY'
+          from pathlib import Path
+          from agent_audit import ZERO_HASH
+          from agent_audit_bundle import _canonical_bytes
+          from agent_audit_catalog import _build_catalog
+          from agent_audit_checkpoint import create_checkpoint, create_proof
+
+          root = Path.cwd().parent
+          entry = {
+              "segment_index": 1,
+              "directory": "segment-0001",
+              "segment_id": "1".zfill(64),
+              "previous_segment_id": ZERO_HASH,
+              "manifest_sha256": "2".zfill(64),
+              "segment_sha256": "3".zfill(64),
+              "head_hash": "4".zfill(64),
+              "records": 1,
+              "bytes": 100,
+          }
+          catalog = _build_catalog([entry], generation=1, previous_catalog_id=ZERO_HASH)
+          checkpoint = create_checkpoint(catalog)
+          proof = create_proof(catalog, checkpoint, segment_index=1)
+          (root / "checkpoint.json").write_bytes(_canonical_bytes(checkpoint))
+          (root / "proof.json").write_bytes(_canonical_bytes(proof))
+          (root / "pins.txt").write_text(checkpoint["checkpoint_id"] + "\n")
+          PY
+          CHECKPOINT_ID=$(cat "$ROOT/pins.txt")
+          "$BIN/basit-agent-audit-bundle" create "$ROOT/bundle" \
+            --checkpoint "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --proof "$ROOT/proof.json" --format json > "$ROOT/create.json"
+          BUNDLE_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/create.json")
+          "$BIN/agent-audit-bundle" verify "$ROOT/bundle" \
+            --expected-bundle-id "$BUNDLE_ID" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/verify.json"
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.cwd().parent
+          report = json.loads((root / "verify.json").read_text())
+          assert report["valid"] is True
+          assert report["bundle_type"] == "snapshot"
+          assert report["proof_count"] == 1
+          assert report["segment_count"] == 0
+          PY

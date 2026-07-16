@@ -1,0 +1,162 @@
+name: audit-evidence-bundle
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  bundle-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test portable audit evidence bundles
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_evidence_bundle.py" -v \
+            > "$RUNNER_TEMP/audit-evidence-bundle-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 240 "$RUNNER_TEMP/audit-evidence-bundle-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-evidence-bundle-tests.log"
+      - name: Re-run audit evidence regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_catalog_consistency.py" -v
+          python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_catalog.py" -v
+          python -m unittest discover -s tests -p "test_audit_segments.py" -v
+          python -m unittest discover -s tests -p "test_agent_audit.py" -v
+      - name: Compile bundle runtime
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_audit_bundle.py agent_system.py tests/test_audit_evidence_bundle.py
+      - name: Preserve bundle diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-evidence-bundle-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-evidence-bundle-tests.log
+          if-no-files-found: warn
+
+  bundle-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create and independently verify portable bundle
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-evidence-bundle"
+          SOURCE="$ROOT/source"
+          ARCHIVE="$SOURCE/segments"
+          ACTIVE="$SOURCE/active.jsonl"
+          CATALOG="$ARCHIVE/catalog.json"
+          CHECKPOINT="$SOURCE/checkpoint.json"
+          PROOF_ONE="$SOURCE/proof-one.json"
+          PROOF_THREE="$SOURCE/proof-three.json"
+          BUNDLE="$ROOT/bundle"
+          mkdir -p "$ARCHIVE"
+
+          python agent_system.py --audit-log "$ACTIVE" scan . \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          python agent_audit_segments.py rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/segment-one" --format json > "$ROOT/rotate-one.json"
+          python agent_system.py --audit-log "$ACTIVE" guard python -m unittest \
+            > "$ROOT/guard.json"
+          python agent_audit_segments.py rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/segment-two" --format json > "$ROOT/rotate-two.json"
+          python agent_system.py --audit-log "$ACTIVE" scrub README.md \
+            --output "$ROOT/readme.scrubbed" > "$ROOT/scrub.json"
+          python agent_audit_segments.py rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/segment-three" --format json > "$ROOT/rotate-three.json"
+
+          python agent_audit_catalog.py init "$CATALOG" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog-report.json"
+          CATALOG_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-report.json")
+          python agent_audit_checkpoint.py create "$CATALOG" "$CHECKPOINT" \
+            --expected-catalog-id "$CATALOG_ID" --active "$ACTIVE" --format json \
+            > "$ROOT/checkpoint-report.json"
+          CHECKPOINT_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/checkpoint-report.json")
+          python agent_audit_checkpoint.py prove "$CATALOG" "$CHECKPOINT" "$PROOF_ONE" \
+            --expected-catalog-id "$CATALOG_ID" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --active "$ACTIVE" --segment-index 1 --format json > "$ROOT/proof-one-report.json"
+          python agent_audit_checkpoint.py prove "$CATALOG" "$CHECKPOINT" "$PROOF_THREE" \
+            --expected-catalog-id "$CATALOG_ID" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --active "$ACTIVE" --segment-index 3 --format json > "$ROOT/proof-three-report.json"
+
+          python agent_audit_bundle.py create "$BUNDLE" \
+            --checkpoint "$CHECKPOINT" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --proof "$PROOF_ONE" --proof "$PROOF_THREE" --segment-root "$ARCHIVE" \
+            --format json > "$ROOT/bundle-report.json"
+          BUNDLE_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/bundle-report.json")
+          python agent_audit_bundle.py verify "$BUNDLE" \
+            --expected-bundle-id "$BUNDLE_ID" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/verify-full.json"
+
+          rm -rf "$SOURCE"
+          python agent_audit_bundle.py verify "$BUNDLE" \
+            --expected-bundle-id "$BUNDLE_ID" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/verify-portable.json"
+
+          set +e
+          python agent_audit_bundle.py verify "$BUNDLE" \
+            --expected-bundle-id "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" --format json \
+            > "$ROOT/stale-pin.json" 2> "$ROOT/stale-pin.err"
+          STALE_STATUS=$?
+          set -e
+          test "$STALE_STATUS" -eq 1
+
+          cp -R "$BUNDLE" "$ROOT/tampered-bundle"
+          printf 'x' >> "$ROOT/tampered-bundle/proofs/segment-00000001.json"
+          set +e
+          python agent_audit_bundle.py verify "$ROOT/tampered-bundle" \
+            --expected-bundle-id "$BUNDLE_ID" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/tampered.json" 2> "$ROOT/tampered.err"
+          TAMPER_STATUS=$?
+          set -e
+          test "$TAMPER_STATUS" -eq 2
+
+          cp -R "$BUNDLE" "$ROOT/extra-bundle"
+          printf 'extra\n' > "$ROOT/extra-bundle/extra.txt"
+          set +e
+          python agent_audit_bundle.py verify "$ROOT/extra-bundle" \
+            --expected-bundle-id "$BUNDLE_ID" --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/extra.json" 2> "$ROOT/extra.err"
+          EXTRA_STATUS=$?
+          set -e
+          test "$EXTRA_STATUS" -eq 2
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-evidence-bundle'
+          created = json.loads((root / 'bundle-report.json').read_text())
+          full = json.loads((root / 'verify-full.json').read_text())
+          portable = json.loads((root / 'verify-portable.json').read_text())
+          assert created['valid'] is full['valid'] is portable['valid'] is True
+          assert created['bundle_id'] == full['bundle_id'] == portable['bundle_id']
+          assert full['bundle_type'] == portable['bundle_type'] == 'snapshot'
+          assert full['proof_count'] == portable['proof_count'] == 2
+          assert full['segment_count'] == portable['segment_count'] == 2
+          assert not (root / 'source').exists()
+          PY
+      - name: Preserve verified bundle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-evidence-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-evidence-bundle/
+          if-no-files-found: error
