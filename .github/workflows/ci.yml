@@ -53,6 +53,10 @@ jobs:
         run: python -m unittest discover -s tests -p "test_release_bundle.py" -v
       - name: Test SBOM and provenance evidence
         run: python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
+      - name: Test consumer release admission
+        run: python -m unittest discover -s tests -p "test_release_admission.py" -v
+      - name: Test verified release transitions
+        run: python -m unittest discover -s tests -p "test_release_transition.py" -v
       - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
