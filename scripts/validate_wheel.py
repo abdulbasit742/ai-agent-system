@@ -20,6 +20,7 @@ except ModuleNotFoundError:  # Direct execution via `python scripts/validate_whe
 EXPECTED_NAME = "basit-agent-system"
 EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
+    "agent_audit.py",
     "agent_baseline.py",
     "agent_changed_lines.py",
     "agent_cli.py",
@@ -27,6 +28,7 @@ EXPECTED_MODULES = {
     "agent_git.py",
     "agent_policy.py",
     "agent_system.py",
+    "agent_system_legacy.py",
     "agent_version.py",
 }
 EXPECTED_SCRIPTS = {
@@ -38,7 +40,7 @@ EXPECTED_SCRIPTS = {
 FORBIDDEN_FRAGMENTS = {
     ".env",
     ".agent-system",
-    "audit",
+    "audit.jsonl",
     "baseline.json",
     "action.yml",
     "development-progress",
