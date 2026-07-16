@@ -30,7 +30,11 @@
 - Provenance must bind the exact wheel digest, source commit, source epoch, package identity, module list, console commands, and zero-runtime-dependency boundary.
 - Evidence verification must regenerate expected SBOM and provenance objects from the bundled wheel; matching manifest hashes alone are insufficient.
 - Never describe unsigned provenance as signed, authenticated, transparency-logged, or non-repudiable.
-- Ordinary CI may build, verify, and upload evidence artifacts but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Release admission policies are consumer-owned inputs and must never be loaded from inside a release bundle.
+- Admission must verify the complete bundle before applying policy and must distinguish policy denial (`1`) from malformed or unverifiable input (`2`).
+- Admission reports must include the canonical policy SHA-256 and stable `ADMxxx` rules without source previews or environment secrets.
+- Exact expected source commit and version are mandatory for admission; an expected release ID should be supplied when one reviewed manifest is known.
+- Ordinary CI may build, verify, admit, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
@@ -48,9 +52,11 @@ python -m unittest discover -s tests -p "test_packaging.py" -v
 python -m unittest discover -s tests -p "test_wheel_validator.py" -v
 python -m unittest discover -s tests -p "test_release_bundle.py" -v
 python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
+python -m unittest discover -s tests -p "test_release_admission.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
 python scripts/release_bundle.py verify release
+python scripts/release_admission.py evaluate release --policy .release-admission.example.json --expected-source-commit "$(git rev-parse HEAD)" --expected-version "0.1.0"
 python agent_system.py scan . --format json --fail-on high
 ```
