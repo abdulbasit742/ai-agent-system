@@ -90,8 +90,12 @@ All notable public distribution changes are recorded here.
 - authenticated first accepted-transition entries binding retained receiver head hash, trust checkpoint/state identity, entry-count delta, and generation delta
 - stable `ARR009` rollback, `ARR010` fork/substitution, and `ARR011` invalid receiver-boundary denials with no proof artifact on denied creation
 - proof-only receiver consistency verification after removal of both complete receiver states
-- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, trust-receiver, receiver-checkpoint, and receiver-consistency aliases, a reviewed twenty-six-module/thirty-two-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver/receiver-checkpoint/receiver-consistency, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable snapshot and transition receiver checkpoint bundles with exact manifests, sorted checksums, external bundle/checkpoint pins, and mandatory candidate-head inclusion proofs
+- offline receiver-bundle verification after removal of complete receiver states and all loose checkpoint/proof inputs
+- native receiver canonical evidence serialization with compact canonical manifests and immutable no-overwrite publication
+- stable `ARB001` through `ARB012` diagnostics for unsafe paths, stale pins, invalid composition, substitution, boundary drift, tampering, and overwrite attempts
+- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, trust-receiver, receiver-checkpoint, receiver-consistency, and receiver-bundle aliases, a reviewed twenty-seven-module/thirty-four-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver/receiver-checkpoint/receiver-consistency/receiver-bundle, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
