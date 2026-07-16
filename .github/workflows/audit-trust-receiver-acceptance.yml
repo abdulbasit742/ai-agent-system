@@ -1,0 +1,27 @@
+name: audit-trust-receiver-acceptance
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  receiver-acceptance-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test receiver acceptance state
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance.py" -v
+      - name: Re-run receiver bundle and admission regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_bundle.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_admission.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance.py tests/test_audit_trust_receiver_acceptance.py
