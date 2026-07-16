@@ -81,6 +81,7 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(
             {
                 "agent_audit",
+                "agent_audit_events",
                 "agent_baseline",
                 "agent_changed_lines",
                 "agent_cli",
