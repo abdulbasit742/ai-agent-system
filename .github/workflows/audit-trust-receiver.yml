@@ -1,0 +1,115 @@
+name: audit-trust-receiver
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  receiver-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test receiver state core
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_cli.py" -v
+      - name: Re-run handoff and admission regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_bundle.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_admission.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver.py tests/audit_trust_receiver_cases.py tests/test_audit_trust_receiver.py tests/test_audit_trust_receiver_cli.py
+
+  receiver-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Anchor, advance, and reject stale replay
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-receiver"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          from agent_audit_trust import canonical_json
+          from agent_audit_trust_admission import default_policy
+          from audit_trust_receiver_cases import admitted
+          from test_audit_trust_consistency import advance, anchor
+
+          root = Path(os.environ["ROOT"])
+          retained = anchor()
+          candidate = advance(retained)
+          snapshot = admitted(root / "snapshot", retained)
+          transition = admitted(root / "transition", candidate, retained)
+          (root / "policy.json").write_bytes(canonical_json(default_policy()))
+          (root / "pins.json").write_text(json.dumps({
+              "snapshot_bundle": snapshot[3]["bundle_id"],
+              "snapshot_checkpoint": snapshot[2]["candidate"]["checkpoint_id"],
+              "transition_bundle": transition[3]["bundle_id"],
+              "transition_checkpoint": transition[2]["candidate"]["checkpoint_id"],
+              "snapshot_path": str(snapshot[4]),
+              "transition_path": str(transition[4]),
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          SNAPSHOT_BUNDLE=$(pin snapshot_bundle)
+          SNAPSHOT_CHECKPOINT=$(pin snapshot_checkpoint)
+          TRANSITION_BUNDLE=$(pin transition_bundle)
+          TRANSITION_CHECKPOINT=$(pin transition_checkpoint)
+          SNAPSHOT_PATH=$(pin snapshot_path)
+          TRANSITION_PATH=$(pin transition_path)
+          python agent_audit_trust_receiver.py init "$ROOT/receiver.json" "$SNAPSHOT_PATH" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$SNAPSHOT_BUNDLE" \
+            --expected-candidate-checkpoint-id "$SNAPSHOT_CHECKPOINT" \
+            --format json > "$ROOT/init.json"
+          STATE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_id"])' "$ROOT/init.json")
+          python agent_audit_trust_receiver.py advance "$ROOT/receiver.json" "$TRANSITION_PATH" \
+            --policy "$ROOT/policy.json" \
+            --expected-state-id "$STATE" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
+            --format json > "$ROOT/advance.json"
+          UPDATED=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_id"])' "$ROOT/advance.json")
+          cp "$ROOT/receiver.json" "$ROOT/before-denial.json"
+          set +e
+          python agent_audit_trust_receiver.py advance "$ROOT/receiver.json" "$TRANSITION_PATH" \
+            --policy "$ROOT/policy.json" \
+            --expected-state-id "$UPDATED" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
+            --format json > "$ROOT/replay.json" 2> "$ROOT/replay-error.json"
+          REPLAY=$?
+          python agent_audit_trust_receiver.py verify "$ROOT/receiver.json" \
+            --expected-state-id "$STATE" --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          set -e
+          test "$REPLAY" -eq 2
+          test "$STALE" -eq 1
+          cmp "$ROOT/before-denial.json" "$ROOT/receiver.json"
+          python agent_audit_trust_receiver.py verify "$ROOT/receiver.json" \
+            --expected-state-id "$UPDATED" --bundle "$TRANSITION_PATH" --format json \
+            > "$ROOT/verify.json"
+          python -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["entries"]==2' "$ROOT/verify.json"
+      - name: Preserve receiver evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver/
+          if-no-files-found: warn
