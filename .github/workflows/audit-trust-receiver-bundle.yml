@@ -1,0 +1,117 @@
+name: audit-trust-receiver-bundle
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  receiver-bundle-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test receiver bundles
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_bundle.py" -v
+      - name: Re-run receiver checkpoint and consistency regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_consistency.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_bundle.py tests/test_audit_trust_receiver_bundle.py
+
+  receiver-bundle-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create transition bundle and verify without loose evidence
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-receiver-bundle"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          from agent_audit_trust_receiver import canonical_json
+          from agent_audit_trust_receiver_checkpoint import create_checkpoint, create_proof
+          from agent_audit_trust_receiver_consistency import create_consistency_proof
+          from test_audit_trust_receiver_consistency import receiver_state
+
+          root = Path(os.environ["ROOT"])
+          previous = receiver_state(1)
+          candidate = receiver_state(3)
+          previous_cp = create_checkpoint(previous)
+          candidate_cp = create_checkpoint(candidate)
+          head_proof = create_proof(candidate, candidate_cp, sequence=3)
+          consistency = create_consistency_proof(
+              previous, previous_cp, candidate, candidate_cp
+          )
+          for name, value in {
+              "previous.json": previous_cp,
+              "candidate.json": candidate_cp,
+              "head-proof.json": head_proof,
+              "consistency.json": consistency,
+          }.items():
+              (root / name).write_bytes(canonical_json(value))
+          (root / "pins.json").write_text(json.dumps({
+              "previous": previous_cp["checkpoint_id"],
+              "candidate": candidate_cp["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          PREVIOUS=$(pin previous)
+          CANDIDATE=$(pin candidate)
+          python agent_audit_trust_receiver_bundle.py create "$ROOT/handoff" \
+            --candidate-checkpoint "$ROOT/candidate.json" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --proof "$ROOT/head-proof.json" \
+            --previous-checkpoint "$ROOT/previous.json" \
+            --expected-previous-checkpoint-id "$PREVIOUS" \
+            --consistency-proof "$ROOT/consistency.json" \
+            --format json > "$ROOT/create.json"
+          BUNDLE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/create.json")
+          rm "$ROOT/previous.json" "$ROOT/candidate.json" "$ROOT/head-proof.json" "$ROOT/consistency.json"
+          python agent_audit_trust_receiver_bundle.py verify "$ROOT/handoff" \
+            --expected-bundle-id "$BUNDLE" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS" \
+            --format json > "$ROOT/verify.json"
+          python -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["bundle_type"]=="transition" and d["proof_count"]==1' "$ROOT/verify.json"
+          set +e
+          python agent_audit_trust_receiver_bundle.py verify "$ROOT/handoff" \
+            --expected-bundle-id "$(printf 'f%.0s' {1..64})" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS" \
+            --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          set -e
+          test "$STALE" -eq 1
+          printf tamper >> "$ROOT/handoff/proofs/receiver-entry-00000003.json"
+          set +e
+          python agent_audit_trust_receiver_bundle.py verify "$ROOT/handoff" \
+            --expected-bundle-id "$BUNDLE" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS" \
+            --format json > "$ROOT/tamper.json" 2> "$ROOT/tamper-error.json"
+          TAMPER=$?
+          set -e
+          test "$TAMPER" -eq 2
+      - name: Preserve receiver bundle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver-bundle/
+          if-no-files-found: warn
