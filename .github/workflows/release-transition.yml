@@ -1,0 +1,111 @@
+name: release-transition
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  transition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Test release transition gate
+        run: python -m unittest discover -s tests -p "test_release_transition.py" -v
+      - name: Validate reviewed transition policy
+        run: python scripts/release_transition.py policy .release-transition.example.json
+      - name: Build current verified release bundle
+        id: release
+        env:
+          SOURCE_DATE_EPOCH: ${{ github.event.repository.updated_at }}
+        run: |
+          EPOCH="$(git show -s --format=%ct HEAD)"
+          python -m pip wheel . --no-deps --wheel-dir dist-transition
+          python scripts/release_bundle.py create \
+            --wheel dist-transition/*.whl \
+            --output-dir release-transition \
+            --source-commit "$GITHUB_SHA" \
+            --source-date-epoch "$EPOCH"
+          python scripts/release_bundle.py verify release-transition
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          from agent_version import __version__
+
+          manifest = json.loads(Path('release-transition/release-manifest.json').read_text())
+          print(f"release_id={manifest['release_id']}")
+          print(f"version={__version__}")
+          PY
+      - name: Confirm replay is denied by default
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set +e
+          python scripts/release_transition.py gate \
+            release-transition release-transition \
+            --policy .release-transition.example.json \
+            --expected-previous-release-id "$RELEASE_ID" \
+            --expected-candidate-source-commit "$GITHUB_SHA" \
+            --expected-candidate-version "$RELEASE_VERSION" \
+            --expected-candidate-release-id "$RELEASE_ID" \
+            --format json > "$RUNNER_TEMP/replay-denied.json"
+          STATUS=$?
+          set -e
+          test "$STATUS" -eq 1
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'replay-denied.json').read_text())
+          assert report['accepted'] is False
+          assert report['risk'] == 'replay'
+          assert 'TRN003' in {item['rule_id'] for item in report['violations']}
+          PY
+      - name: Confirm replay requires explicit consumer approval
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          source = json.loads(Path('.release-transition.example.json').read_text())
+          source['identity']['allow_replay'] = True
+          target = Path(os.environ['RUNNER_TEMP'], 'allow-replay.json')
+          target.write_text(json.dumps(source, sort_keys=True, indent=2) + '\n')
+          PY
+          python scripts/release_transition.py gate \
+            release-transition release-transition \
+            --policy "$RUNNER_TEMP/allow-replay.json" \
+            --expected-previous-release-id "$RELEASE_ID" \
+            --expected-candidate-source-commit "$GITHUB_SHA" \
+            --expected-candidate-version "$RELEASE_VERSION" \
+            --expected-candidate-release-id "$RELEASE_ID" \
+            --format json > "$RUNNER_TEMP/release-transition-decision.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'release-transition-decision.json').read_text())
+          assert report['accepted'] is True
+          assert report['violations'] == []
+          assert report['previous']['release_id'] == report['candidate']['release_id']
+          assert len(report['policy']['sha256']) == 64
+          assert len(report['transition_id']) == 64
+          PY
+      - name: Preserve transition decision
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-transition-${{ github.sha }}
+          path: ${{ runner.temp }}/release-transition-decision.json
+          if-no-files-found: error
