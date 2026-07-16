@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import tempfile
@@ -14,6 +15,7 @@ from scripts.release_bundle import (
     create_bundle,
     verify_bundle,
 )
+from scripts.supply_chain_evidence import evidence_names
 from scripts.validate_wheel import EXPECTED_MODULES, EXPECTED_SCRIPTS
 
 
@@ -63,23 +65,28 @@ class ReleaseBundleTests(unittest.TestCase):
             wheel = build_wheel(root / f"basit_agent_system-{__version__}-py3-none-any.whl")
             manifest = create_bundle([wheel], root / "release", COMMIT, EPOCH)
             result = verify_bundle(root / "release")
+            evidence = evidence_names(wheel.name)
         self.assertEqual("basit-agent-system", manifest["project"])
+        self.assertEqual(2, manifest["manifest_version"])
         self.assertEqual(__version__, result["version"])
         self.assertEqual(COMMIT, result["source_commit"])
         self.assertEqual(1, result["artifacts"])
+        self.assertEqual(2, result["evidence_files"])
+        self.assertIn(evidence["sbom"], result["files"])
+        self.assertIn(evidence["provenance"], result["files"])
+        self.assertEqual(5, len(result["files"]))
 
-    def test_manifest_and_checksums_are_deterministic(self):
+    def test_manifest_checksums_and_supply_chain_evidence_are_deterministic(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             wheel = build_wheel(root / f"basit_agent_system-{__version__}-py3-none-any.whl")
             create_bundle([wheel], root / "release-a", COMMIT, EPOCH)
             create_bundle([wheel], root / "release-b", COMMIT, EPOCH)
-            manifest_a = (root / "release-a" / MANIFEST_NAME).read_bytes()
-            manifest_b = (root / "release-b" / MANIFEST_NAME).read_bytes()
-            checksums_a = (root / "release-a" / CHECKSUMS_NAME).read_bytes()
-            checksums_b = (root / "release-b" / CHECKSUMS_NAME).read_bytes()
-        self.assertEqual(manifest_a, manifest_b)
-        self.assertEqual(checksums_a, checksums_b)
+            names = evidence_names(wheel.name)
+            compared = [MANIFEST_NAME, CHECKSUMS_NAME, names["sbom"], names["provenance"]]
+            first = {name: (root / "release-a" / name).read_bytes() for name in compared}
+            second = {name: (root / "release-b" / name).read_bytes() for name in compared}
+        self.assertEqual(first, second)
 
     def test_compare_identical_wheels(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -160,6 +167,43 @@ class ReleaseBundleTests(unittest.TestCase):
             manifest["source"]["commit"] = "b" * 40
             path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
             with self.assertRaisesRegex(ReleaseBundleError, "integrity check failed"):
+                verify_bundle(root / "release")
+
+    def test_verify_rejects_tampered_sbom_even_when_manifest_reference_is_rehashed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = build_wheel(root / f"basit_agent_system-{__version__}-py3-none-any.whl")
+            manifest = create_bundle([wheel], root / "release", COMMIT, EPOCH)
+            sbom_record = manifest["artifacts"][0]["evidence"]["sbom"]
+            sbom = root / "release" / sbom_record["filename"]
+            payload = json.loads(sbom.read_text())
+            payload["packages"][0]["licenseDeclared"] = "NOASSERTION"
+            sbom.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+            sbom_record["sha256"] = hashlib.sha256(sbom.read_bytes()).hexdigest()
+            sbom_record["size"] = sbom.stat().st_size
+            from scripts.release_bundle import _release_id
+
+            manifest["release_id"] = _release_id(manifest)
+            manifest_path = root / "release" / MANIFEST_NAME
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+            checksums = root / "release" / CHECKSUMS_NAME
+            lines = []
+            for path in (root / "release").iterdir():
+                if path.name != CHECKSUMS_NAME:
+                    lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+            checksums.write_text("\n".join(sorted(lines)) + "\n")
+            with self.assertRaisesRegex(ReleaseBundleError, "SBOM evidence does not match"):
+                verify_bundle(root / "release")
+
+    def test_verify_rejects_tampered_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = build_wheel(root / f"basit_agent_system-{__version__}-py3-none-any.whl")
+            create_bundle([wheel], root / "release", COMMIT, EPOCH)
+            name = evidence_names(wheel.name)["provenance"]
+            path = root / "release" / name
+            path.write_text(path.read_text() + " ")
+            with self.assertRaisesRegex(ReleaseBundleError, "evidence digest mismatch"):
                 verify_bundle(root / "release")
 
     def test_verify_rejects_unexpected_file(self):

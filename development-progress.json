@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 7,
-    "next_expected": 8
+    "latest_completed": 8,
+    "next_expected": 9
   },
   "completed": [
     {
@@ -131,6 +131,27 @@
         "exact_source_commit_and_epoch": "passed",
         "tamper_and_extra_file_rejection": "passed",
         "read_only_non_publishing_ci": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 8,
+      "title": "Deterministic SBOM and provenance evidence",
+      "status": "completed",
+      "summary": "Added per-wheel SPDX 2.3 JSON SBOMs, unsigned in-toto/SLSA-style provenance, manifest-bound evidence digests, semantic evidence regeneration, and read-only supply-chain validation in release CI.",
+      "verification": {
+        "unit_tests": 109,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "spdx_sbom_generation": "passed",
+        "module_hash_inventory": "passed",
+        "provenance_source_binding": "passed",
+        "manifest_version_2_evidence_binding": "passed",
+        "semantic_evidence_regeneration": "passed",
+        "tampered_sbom_and_provenance_rejection": "passed",
+        "release_readiness_supply_chain_validation": "passed",
+        "read_only_unsigned_evidence_boundary": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

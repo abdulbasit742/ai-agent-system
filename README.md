@@ -12,6 +12,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - first-party GitHub Action with annotations, job summaries, JSON, SARIF, and structured outputs
 - installable dependency-free Python package with reviewed wheel contents and console commands
 - reproducible release evidence with exact source identity, canonical manifests, and SHA-256 checksums
+- deterministic SPDX SBOMs and source-bound provenance statements
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -69,7 +70,7 @@ python scripts/validate_wheel.py dist/*.whl
 
 See [docs/python-distribution.md](docs/python-distribution.md), [docs/security-audit-python-distribution.md](docs/security-audit-python-distribution.md), and [CHANGELOG.md](CHANGELOG.md).
 
-## Reproducible release evidence
+## Reproducible release and supply-chain evidence
 
 Build the same reviewed source twice with one deterministic source epoch:
 
@@ -92,11 +93,13 @@ python scripts/release_bundle.py create \
 python scripts/release_bundle.py verify release
 ```
 
-A verified bundle contains only the reviewed wheel, `release-manifest.json`, and `SHA256SUMS`. The manifest records the exact source commit, deterministic source timestamp, package identity, artifact size, wheel metadata, SHA-256 digest, and a canonical `release_id`. Extra files, symlinks, tampering, checksum drift, metadata drift, or byte-different builds fail closed.
+For every wheel, a verified bundle contains the reviewed wheel, an SPDX 2.3 JSON SBOM, an unsigned in-toto/SLSA-style provenance statement, `release-manifest.json`, and `SHA256SUMS`. The manifest binds the exact source commit, deterministic epoch, wheel identity, evidence filenames, media types, sizes, digests, and canonical `release_id`.
 
-CI uploads the verified bundle only as a read-only workflow artifact. It does not publish to a package registry, create a GitHub Release, request OIDC credentials, or read registry secrets.
+Verification does not merely trust evidence hashes. It regenerates the expected SBOM and provenance from the validated wheel and source identity, so modified evidence still fails even when an attacker recalculates its hash, manifest release ID, and checksum file. Extra files, symlinks, checksum drift, metadata drift, source drift, or byte-different builds fail closed.
 
-See [docs/reproducible-releases.md](docs/reproducible-releases.md) and [docs/security-audit-reproducible-releases.md](docs/security-audit-reproducible-releases.md).
+The provenance statement is intentionally unsigned: it proves deterministic internal consistency but does not claim authenticated signer identity. CI uploads verified evidence only as a read-only workflow artifact. It does not publish to a package registry, create a GitHub Release, request OIDC credentials, read registry secrets, or use signing keys.
+
+See [docs/reproducible-releases.md](docs/reproducible-releases.md), [docs/supply-chain-evidence.md](docs/supply-chain-evidence.md), [docs/security-audit-reproducible-releases.md](docs/security-audit-reproducible-releases.md), and [docs/security-audit-supply-chain-evidence.md](docs/security-audit-supply-chain-evidence.md).
 
 ## GitHub Action
 
@@ -294,6 +297,7 @@ python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /t
 python -m unittest discover -s tests -p "test_github_action.py" -v
 python -m unittest discover -s tests -p "test_packaging.py" -v
 python -m unittest discover -s tests -p "test_release_bundle.py" -v
+python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
