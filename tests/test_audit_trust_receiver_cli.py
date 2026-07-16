@@ -55,7 +55,7 @@ class AuditTrustReceiverCliTests(unittest.TestCase):
         self.assertEqual("ATR006", raised.exception.rule_id)
         self.assertTrue(raised.exception.denied)
 
-    def test_cli_stale_state_pin_is_invalid(self):
+    def test_cli_stale_state_pin_is_denied(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             report, verified, _, _, _ = admitted(root / "input", anchor())
@@ -64,7 +64,7 @@ class AuditTrustReceiverCliTests(unittest.TestCase):
             state_path.write_bytes(canonical_json(state))
             with contextlib.redirect_stderr(io.StringIO()):
                 status = main(["verify", str(state_path), "--expected-state-id", "f" * 64])
-        self.assertEqual(2, status)
+        self.assertEqual(1, status)
 
     def test_denied_policy_leaves_state_bytes_unchanged(self):
         retained = anchor()
