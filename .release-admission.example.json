@@ -2,9 +2,7 @@
   "version": 1,
   "project": {
     "name": "basit-agent-system",
-    "allowed_versions": [
-      "0.1.0"
-    ]
+    "allowed_versions": ["0.1.0"]
   },
   "source": {
     "repository": "https://github.com/abdulbasit742/ai-agent-system"
@@ -34,6 +32,7 @@
       "agent_audit_trust_receiver_acceptance_checkpoint.py",
       "agent_audit_trust_receiver_acceptance_consistency.py",
       "agent_audit_trust_receiver_acceptance_trust.py",
+      "agent_audit_trust_receiver_acceptance_trust_checkpoint.py",
       "agent_audit_trust_receiver_admission.py",
       "agent_audit_trust_receiver_bundle.py",
       "agent_audit_trust_receiver_checkpoint.py",
@@ -67,6 +66,7 @@
       "agent-audit-trust-receiver-acceptance-checkpoint",
       "agent-audit-trust-receiver-acceptance-consistency",
       "agent-audit-trust-receiver-acceptance-trust",
+      "agent-audit-trust-receiver-acceptance-trust-checkpoint",
       "agent-audit-trust-receiver-admission",
       "agent-audit-trust-receiver-bundle",
       "agent-audit-trust-receiver-checkpoint",
@@ -88,6 +88,7 @@
       "basit-agent-audit-trust-receiver-acceptance-checkpoint",
       "basit-agent-audit-trust-receiver-acceptance-consistency",
       "basit-agent-audit-trust-receiver-acceptance-trust",
+      "basit-agent-audit-trust-receiver-acceptance-trust-checkpoint",
       "basit-agent-audit-trust-receiver-admission",
       "basit-agent-audit-trust-receiver-bundle",
       "basit-agent-audit-trust-receiver-checkpoint",
@@ -103,13 +104,8 @@
   "sbom": {
     "spdx_version": "SPDX-2.3",
     "data_license": "CC0-1.0",
-    "allowed_licenses": [
-      "MIT"
-    ],
-    "required_checksum_algorithms": [
-      "SHA1",
-      "SHA256"
-    ],
+    "allowed_licenses": ["MIT"],
+    "required_checksum_algorithms": ["SHA1", "SHA256"],
     "files_analyzed": true
   },
   "provenance": {
