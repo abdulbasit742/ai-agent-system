@@ -92,3 +92,46 @@ jobs:
           name: basit-agent-system-audit-segments-${{ github.sha }}
           path: ${{ runner.temp }}/audit-segments/
           if-no-files-found: error
+
+  package-segment-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise segment aliases outside source checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/segment-venv"
+          BIN="$RUNNER_TEMP/segment-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-segments"
+          ACTIVE="$ROOT/active.jsonl"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+          "$BIN/basit-agent" --audit-log "$ACTIVE" scan "$GITHUB_WORKSPACE" \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          "$BIN/basit-agent-segments" rotate --path "$ACTIVE" \
+            --output-dir "$ROOT/0001" --format json > "$ROOT/rotate.json"
+          LATEST=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["segment_id"])' "$ROOT/rotate.json")
+          "$BIN/agent-audit-segments" verify "$ROOT/0001" --active "$ACTIVE" \
+            --expected-latest-segment-id "$LATEST" --format json > "$ROOT/verify.json"
+          "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'installed-segments'
+          report = json.loads((root / 'verify.json').read_text())
+          assert report['valid'] is True
+          assert report['segment_count'] == 1
+          assert report['active']['privacy_safe'] is True
+          PY
