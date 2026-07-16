@@ -1,0 +1,96 @@
+name: audit-trust-receiver-acceptance-checkpoint
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-checkpoint-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test acceptance checkpoints and proofs
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_checkpoint.py" -v
+      - name: Re-run acceptance and receiver bundle regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_bundle.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_admission.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance_checkpoint.py tests/test_audit_trust_receiver_acceptance_checkpoint.py
+
+  acceptance-checkpoint-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create checkpoint, prove head, verify offline, and gate lineage
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-receiver-acceptance-checkpoint"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          from agent_audit_trust_receiver_acceptance import append_transition, canonical_json, create_state
+          from test_audit_trust_receiver_acceptance import report, verified_snapshot, verified_transition
+
+          root = Path(os.environ["ROOT"])
+          snapshot = verified_snapshot()
+          transition = verified_transition(snapshot["candidate"])
+          state1 = create_state(report(snapshot), snapshot)
+          state2 = append_transition(state1, report(transition), transition)
+          (root / "state1.json").write_bytes(canonical_json(state1))
+          (root / "state2.json").write_bytes(canonical_json(state2))
+          (root / "pins.json").write_text(json.dumps({"state1": state1["state_id"], "state2": state2["state_id"], "bundle": state2["head"]["handoff_bundle_id"]}, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          STATE1=$(pin state1)
+          STATE2=$(pin state2)
+          BUNDLE=$(pin bundle)
+          python agent_audit_trust_receiver_acceptance_checkpoint.py create \
+            "$ROOT/state2.json" "$ROOT/checkpoint.json" \
+            --expected-state-id "$STATE2" --format json > "$ROOT/create.json"
+          CHECKPOINT=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/create.json")
+          python agent_audit_trust_receiver_acceptance_checkpoint.py prove \
+            "$ROOT/state2.json" "$ROOT/checkpoint.json" "$ROOT/proof.json" \
+            --expected-state-id "$STATE2" \
+            --expected-checkpoint-id "$CHECKPOINT" \
+            --handoff-bundle-id "$BUNDLE" --format json > "$ROOT/prove.json"
+          python agent_audit_trust_receiver_acceptance_checkpoint.py lineage \
+            "$ROOT/state1.json" "$ROOT/state2.json" \
+            --expected-left-state-id "$STATE1" --expected-right-state-id "$STATE2" \
+            --format json > "$ROOT/descendant.json"
+          set +e
+          python agent_audit_trust_receiver_acceptance_checkpoint.py lineage \
+            "$ROOT/state2.json" "$ROOT/state1.json" \
+            --expected-left-state-id "$STATE2" --expected-right-state-id "$STATE1" \
+            --format json > "$ROOT/rollback.json" 2>&1
+          ROLLBACK=$?
+          set -e
+          test "$ROLLBACK" -eq 1
+          rm "$ROOT/state2.json"
+          python agent_audit_trust_receiver_acceptance_checkpoint.py verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT" --format json > "$ROOT/verify-proof.json"
+          python -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["entry"]["sequence"]==2' "$ROOT/verify-proof.json"
+      - name: Preserve acceptance checkpoint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-checkpoint-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver-acceptance-checkpoint/
+          if-no-files-found: warn
