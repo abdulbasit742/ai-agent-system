@@ -1,10 +1,13 @@
 import contextlib
 import copy
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import agent_audit_admission
 import agent_system
 from agent_audit import ZERO_HASH
 from agent_audit_admission import (
@@ -17,6 +20,8 @@ from agent_audit_admission import (
     policy_sha256,
     validate_policy,
 )
+from agent_audit_bundle import MANIFEST_NAME
+from agent_audit_bundle import _bundle_id, _canonical_bytes as bundle_bytes
 from agent_audit_bundle import create_bundle
 from agent_audit_catalog import _build_catalog, initialize_catalog, load_catalog
 from agent_audit_checkpoint import _canonical_bytes as evidence_bytes
@@ -39,11 +44,7 @@ def entry(index: int, previous: str) -> dict:
     }
 
 
-def catalog(
-    size: int,
-    generation: int = 1,
-    previous_catalog_id: str = ZERO_HASH,
-) -> dict:
+def catalog(size: int, generation: int = 1, previous_catalog_id: str = ZERO_HASH) -> dict:
     items, previous = [], ZERO_HASH
     for index in range(1, size + 1):
         item = entry(index, previous)
@@ -66,9 +67,7 @@ def descendant(previous: dict, size: int, delta: int = 1) -> dict:
     return _build_catalog(
         items,
         generation=previous["generation"] + delta,
-        previous_catalog_id=(
-            previous["catalog_id"] if delta == 1 else "e" * 64
-        ),
+        previous_catalog_id=(previous["catalog_id"] if delta == 1 else "e" * 64),
     )
 
 
@@ -84,10 +83,7 @@ def make_snapshot(root: Path, indexes=(1, 3)):
     proofs = []
     for index in indexes:
         path = root / f"proof-{index}.json"
-        write_evidence(
-            path,
-            create_proof(current, checkpoint, segment_index=index),
-        )
+        write_evidence(path, create_proof(current, checkpoint, segment_index=index))
         proofs.append(path)
     manifest = create_bundle(
         root / "bundle",
@@ -151,10 +147,7 @@ def make_sealed(root: Path):
     checkpoint_path = root / "checkpoint.json"
     proof_path = root / "proof.json"
     write_evidence(checkpoint_path, checkpoint)
-    write_evidence(
-        proof_path,
-        create_proof(current, checkpoint, segment_index=1),
-    )
+    write_evidence(proof_path, create_proof(current, checkpoint, segment_index=1))
     manifest = create_bundle(
         root / "bundle",
         checkpoint_path,
@@ -179,10 +172,7 @@ class AuditBundleAdmissionTests(unittest.TestCase):
     def test_default_policy_is_valid_and_hash_is_deterministic(self):
         policy = default_policy()
         self.assertEqual(policy, validate_policy(policy))
-        self.assertEqual(
-            policy_sha256(policy),
-            policy_sha256(copy.deepcopy(policy)),
-        )
+        self.assertEqual(policy_sha256(policy), policy_sha256(copy.deepcopy(policy)))
 
     def test_policy_rejects_unknown_fields_and_bad_ranges(self):
         policy = default_policy()
@@ -199,10 +189,7 @@ class AuditBundleAdmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "policy.json"
             path.write_text('{"version":1,"version":1}')
-            with self.assertRaisesRegex(
-                AuditBundleAdmissionError,
-                "duplicate JSON",
-            ):
+            with self.assertRaisesRegex(AuditBundleAdmissionError, "duplicate JSON"):
                 load_policy(path)
 
     def test_init_refuses_overwrite(self):
@@ -214,10 +201,7 @@ class AuditBundleAdmissionTests(unittest.TestCase):
 
     def test_default_policy_admits_verified_snapshot(self):
         with tempfile.TemporaryDirectory() as temporary:
-            _, _, _, report = admit_snapshot(
-                Path(temporary),
-                default_policy(),
-            )
+            _, _, _, report = admit_snapshot(Path(temporary), default_policy())
         self.assertTrue(report["admitted"])
         self.assertEqual([], report["violations"])
 
@@ -235,22 +219,12 @@ class AuditBundleAdmissionTests(unittest.TestCase):
                 bundle,
                 default_policy(),
                 expected_bundle_id=manifest["bundle_id"],
-                expected_candidate_checkpoint_id=candidate_checkpoint[
-                    "checkpoint_id"
-                ],
-                expected_previous_checkpoint_id=previous_checkpoint[
-                    "checkpoint_id"
-                ],
+                expected_candidate_checkpoint_id=candidate_checkpoint["checkpoint_id"],
+                expected_previous_checkpoint_id=previous_checkpoint["checkpoint_id"],
             )
         self.assertTrue(report["admitted"])
-        self.assertEqual(
-            previous["catalog_id"],
-            report["identity"]["previous_catalog_id"],
-        )
-        self.assertEqual(
-            candidate["catalog_id"],
-            report["identity"]["candidate_catalog_id"],
-        )
+        self.assertEqual(previous["catalog_id"], report["identity"]["previous_catalog_id"])
+        self.assertEqual(candidate["catalog_id"], report["identity"]["candidate_catalog_id"])
 
     def test_bundle_type_policy_denial(self):
         policy = default_policy()
@@ -362,12 +336,8 @@ class AuditBundleAdmissionTests(unittest.TestCase):
                 bundle,
                 policy,
                 expected_bundle_id=manifest["bundle_id"],
-                expected_candidate_checkpoint_id=candidate_checkpoint[
-                    "checkpoint_id"
-                ],
-                expected_previous_checkpoint_id=previous_checkpoint[
-                    "checkpoint_id"
-                ],
+                expected_candidate_checkpoint_id=candidate_checkpoint["checkpoint_id"],
+                expected_previous_checkpoint_id=previous_checkpoint["checkpoint_id"],
             )
         self.assertEqual(
             ["AUA012", "AUA013"],
@@ -393,32 +363,54 @@ class AuditBundleAdmissionTests(unittest.TestCase):
                 bundle,
                 policy,
                 expected_bundle_id=manifest["bundle_id"],
-                expected_candidate_checkpoint_id=candidate_checkpoint[
-                    "checkpoint_id"
-                ],
-                expected_previous_checkpoint_id=previous_checkpoint[
-                    "checkpoint_id"
-                ],
+                expected_candidate_checkpoint_id=candidate_checkpoint["checkpoint_id"],
+                expected_previous_checkpoint_id=previous_checkpoint["checkpoint_id"],
             )
         self.assertEqual(
             ["AUA014", "AUA015"],
             [item["rule_id"] for item in report["violations"]],
         )
 
-    def test_unverifiable_bundle_is_invalid_not_policy_denial(self):
+    def test_unverifiable_bundle_and_post_verify_manifest_swap_are_invalid(self):
         with tempfile.TemporaryDirectory() as temporary:
-            _, checkpoint, manifest, bundle = make_snapshot(Path(temporary))
+            root = Path(temporary)
+            _, checkpoint, manifest, bundle = make_snapshot(root)
             (bundle / "extra.txt").write_text("extra")
-            with self.assertRaisesRegex(
-                AuditBundleAdmissionError,
-                "verification failed",
-            ):
+            with self.assertRaisesRegex(AuditBundleAdmissionError, "verification failed"):
                 evaluate_bundle(
                     bundle,
                     default_policy(),
                     expected_bundle_id=manifest["bundle_id"],
                     expected_candidate_checkpoint_id=checkpoint["checkpoint_id"],
                 )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, checkpoint, manifest, bundle = make_snapshot(root)
+            real_verify = agent_audit_admission.verify_bundle
+
+            def verify_then_replace(*args, **kwargs):
+                report = real_verify(*args, **kwargs)
+                manifest_path = bundle / MANIFEST_NAME
+                changed = json.loads(manifest_path.read_text())
+                changed["entries"][0]["segment_id"] = "f" * 64
+                changed["bundle_id"] = _bundle_id(changed)
+                manifest_path.write_bytes(bundle_bytes(changed))
+                return report
+
+            with mock.patch(
+                "agent_audit_admission.verify_bundle",
+                side_effect=verify_then_replace,
+            ):
+                with self.assertRaisesRegex(
+                    AuditBundleAdmissionError,
+                    "identity changed",
+                ):
+                    evaluate_bundle(
+                        bundle,
+                        default_policy(),
+                        expected_bundle_id=manifest["bundle_id"],
+                        expected_candidate_checkpoint_id=checkpoint["checkpoint_id"],
+                    )
 
     def test_cli_exit_semantics_and_external_policy_boundary(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -447,11 +439,13 @@ class AuditBundleAdmissionTests(unittest.TestCase):
             internal.write_bytes(canonical_json(default_policy()))
             internal_args = list(base)
             internal_args[3] = str(internal)
+            internal_args.extend(["--format", "text"])
             error = io.StringIO()
             with contextlib.redirect_stderr(error):
                 invalid = main(internal_args)
         self.assertEqual((0, 1, 2), (admitted, denied, invalid))
-        self.assertIn("AUA016", error.getvalue())
+        self.assertIn("rule_id: AUA016", error.getvalue())
+        self.assertIn("error:", error.getvalue())
 
 
 if __name__ == "__main__":
