@@ -34,6 +34,18 @@ jobs:
           python -m unittest discover -s tests -p "test_agent_audit.py" -v \
             > "$RUNNER_TEMP/structural-audit-tests.log" 2>&1
           cat "$RUNNER_TEMP/structural-audit-tests.log"
+      - name: Test added-line audit event compatibility
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_added_line_gate.py" -v \
+            > "$RUNNER_TEMP/added-line-event-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 120 "$RUNNER_TEMP/added-line-event-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/added-line-event-tests.log"
       - name: Preserve event test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,9 +54,10 @@ jobs:
           path: |
             ${{ runner.temp }}/event-tests.log
             ${{ runner.temp }}/structural-audit-tests.log
+            ${{ runner.temp }}/added-line-event-tests.log
           if-no-files-found: warn
       - name: Compile typed audit runtime
-        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_system.py agent_system_legacy.py tests/test_agent_audit.py tests/test_audit_event_admission.py
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_system.py agent_system_legacy.py tests/test_agent_audit.py tests/test_audit_event_admission.py tests/test_added_line_gate.py
 
   event-integration:
     runs-on: ubuntu-latest
