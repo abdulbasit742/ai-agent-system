@@ -1,9 +1,15 @@
-"""Safe Git change-scope discovery for Basit Agent System."""
+"""Safe Git change and added-line scope discovery for Basit Agent System."""
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+HUNK_HEADER = re.compile(
+    rb"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@",
+    re.MULTILINE,
+)
 
 
 class GitDiffError(ValueError):
@@ -110,8 +116,95 @@ def _parse_name_status(payload: bytes) -> list[tuple[str, str | None, str]]:
     return entries
 
 
-def changed_scope(scan_path: Path, base_ref: str, head_ref: str = "HEAD") -> dict[str, Any]:
-    """Resolve a merge-base Git diff and return a safe scan/baseline path scope."""
+def _merge_ranges(ranges: list[tuple[int, int]]) -> list[list[int]]:
+    merged: list[list[int]] = []
+    for start, end in sorted(ranges):
+        if start < 1 or end < start:
+            raise GitDiffError("git returned an invalid line range")
+        if not merged or start > merged[-1][1] + 1:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+    return merged
+
+
+def _parse_hunk_ranges(payload: bytes) -> tuple[list[list[int]], list[list[int]]]:
+    """Return old and new 1-based inclusive ranges from a zero-context patch."""
+    old_ranges: list[tuple[int, int]] = []
+    new_ranges: list[tuple[int, int]] = []
+    for match in HUNK_HEADER.finditer(payload):
+        old_start = int(match.group(1))
+        old_count = int(match.group(2) or b"1")
+        new_start = int(match.group(3))
+        new_count = int(match.group(4) or b"1")
+        if old_count > 0:
+            old_ranges.append((old_start, old_start + old_count - 1))
+        if new_count > 0:
+            new_ranges.append((new_start, new_start + new_count - 1))
+    return _merge_ranges(old_ranges), _merge_ranges(new_ranges)
+
+
+def _record_line_scope(
+    repository_root: Path,
+    merge_base: str,
+    head_sha: str,
+    status: str,
+    old_repo_path: str | None,
+    repo_path: str,
+) -> dict[str, Any]:
+    """Calculate old/new ranges for one validated Git change record."""
+    code = status[0]
+    if code == "D":
+        return {
+            "full_old_file": True,
+            "full_new_file": False,
+            "old_ranges": [],
+            "new_ranges": [],
+        }
+    if code in {"A", "C"}:
+        return {
+            "full_old_file": False,
+            "full_new_file": True,
+            "old_ranges": [],
+            "new_ranges": [],
+        }
+
+    pathspec = [repo_path]
+    if code == "R" and old_repo_path is not None:
+        pathspec = [old_repo_path, repo_path]
+    patch = _run_git(
+        repository_root,
+        [
+            "diff",
+            "--unified=0",
+            "--no-color",
+            "--no-ext-diff",
+            "--find-renames",
+            merge_base,
+            head_sha,
+            "--",
+            *pathspec,
+        ],
+        binary=True,
+    )
+    assert isinstance(patch, bytes)
+    old_ranges, new_ranges = _parse_hunk_ranges(patch)
+    return {
+        "full_old_file": False,
+        "full_new_file": False,
+        "old_ranges": old_ranges,
+        "new_ranges": new_ranges,
+    }
+
+
+def changed_scope(
+    scan_path: Path,
+    base_ref: str,
+    head_ref: str = "HEAD",
+    *,
+    line_only: bool = False,
+) -> dict[str, Any]:
+    """Resolve a merge-base Git diff and return a safe file or added-line scope."""
     scan_root = scan_path.resolve()
     if not scan_root.exists() or not scan_root.is_dir():
         raise GitDiffError("changed-file scanning requires an existing directory scan path")
@@ -156,8 +249,14 @@ def changed_scope(scan_path: Path, base_ref: str, head_ref: str = "HEAD") -> dic
     files: list[dict[str, Any]] = []
     scan_paths: set[str] = set()
     baseline_paths: set[str] = set()
+    scan_lines: dict[str, list[list[int]] | None] = {}
+    baseline_lines: dict[str, list[list[int]] | None] = {}
     deleted = 0
     renamed = 0
+    added_ranges = 0
+    removed_ranges = 0
+    full_file_scans = 0
+    full_file_resolutions = 0
 
     for status, old_repo_path, repo_path in records:
         code = status[0]
@@ -174,40 +273,61 @@ def changed_scope(scan_path: Path, base_ref: str, head_ref: str = "HEAD") -> dic
             deleted += 1
             if relative_path is not None:
                 baseline_paths.add(relative_path)
-            files.append({
-                "status": status,
-                "path": relative_path,
-                "old_path": None,
-                "current": False,
-            })
-            continue
+            current = False
+        else:
+            if code == "R":
+                renamed += 1
+                if old_relative is not None:
+                    baseline_paths.add(old_relative)
+            if relative_path is not None:
+                baseline_paths.add(relative_path)
+            current = False
+            if relative_path is not None:
+                candidate = _validated_repo_path(repository_root, repo_path)
+                if candidate.is_file():
+                    scan_paths.add(relative_path)
+                    current = True
+                elif candidate.exists() and not candidate.is_dir():
+                    raise GitDiffError(f"changed path is not a regular file: {repo_path!r}")
 
-        if code == "R":
-            renamed += 1
-            if old_relative is not None:
-                baseline_paths.add(old_relative)
-        if relative_path is not None:
-            baseline_paths.add(relative_path)
-
-        current = False
-        if relative_path is not None:
-            candidate = _validated_repo_path(repository_root, repo_path)
-            if candidate.is_file():
-                scan_paths.add(relative_path)
-                current = True
-            elif candidate.exists() and not candidate.is_dir():
-                raise GitDiffError(f"changed path is not a regular file: {repo_path!r}")
-
-        files.append({
+        item: dict[str, Any] = {
             "status": status,
             "path": relative_path,
             "old_path": old_relative,
             "current": current,
-        })
+        }
+
+        if line_only:
+            line_scope = _record_line_scope(
+                repository_root,
+                merge_base,
+                head_sha,
+                status,
+                old_repo_path,
+                repo_path,
+            )
+            item.update(line_scope)
+            added_ranges += len(line_scope["new_ranges"])
+            removed_ranges += len(line_scope["old_ranges"])
+
+            if line_scope["full_new_file"] and current and relative_path is not None:
+                scan_lines[relative_path] = None
+                full_file_scans += 1
+            elif current and relative_path is not None and line_scope["new_ranges"]:
+                scan_lines[relative_path] = line_scope["new_ranges"]
+
+            baseline_path = old_relative if code == "R" else relative_path
+            if line_scope["full_old_file"] and baseline_path is not None:
+                baseline_lines[baseline_path] = None
+                full_file_resolutions += 1
+            elif baseline_path is not None and line_scope["old_ranges"]:
+                baseline_lines[baseline_path] = line_scope["old_ranges"]
+
+        files.append(item)
 
     files.sort(key=lambda item: (item["path"] or item["old_path"] or "", item["status"]))
-    return {
-        "type": "git-changes",
+    scope: dict[str, Any] = {
+        "type": "git-added-lines" if line_only else "git-changes",
         "base_ref": base_ref,
         "head_ref": head_ref,
         "base_sha": base_sha,
@@ -221,8 +341,20 @@ def changed_scope(scan_path: Path, base_ref: str, head_ref: str = "HEAD") -> dic
         "_scan_paths": sorted(scan_paths),
         "_baseline_paths": sorted(baseline_paths),
     }
+    if line_only:
+        scope.update({
+            "line_mode": "added-lines",
+            "line_files": len(scan_lines),
+            "added_ranges": added_ranges,
+            "removed_ranges": removed_ranges,
+            "full_file_scans": full_file_scans,
+            "full_file_resolutions": full_file_resolutions,
+            "_scan_lines": scan_lines,
+            "_baseline_lines": baseline_lines,
+        })
+    return scope
 
 
 def public_scope(scope: dict[str, Any]) -> dict[str, Any]:
-    """Return report-safe scope metadata without internal path sets."""
+    """Return report-safe scope metadata without internal path maps."""
     return {key: value for key, value in scope.items() if not key.startswith("_")}
