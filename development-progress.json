@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 21,
-    "next_expected": 22
+    "latest_completed": 22,
+    "next_expected": 23
   },
   "completed": [
     {
@@ -153,6 +153,13 @@
       "status": "completed",
       "summary": "Added a consumer-owned policy gate that fully verifies portable audit bundles before authorizing bundle type, evidence size, proof and sealed-segment coverage, candidate catalog bounds, selected segment identities, and transition continuity requirements.",
       "verification": {"unit_tests": 364, "python_versions": ["3.11", "3.12"], "compileall": "passed", "strict_policy_schema_and_hash": "passed", "verified_before_authorization": "passed", "snapshot_and_transition_admission": "passed", "bundle_limits_and_sealed_evidence_controls": "passed", "candidate_and_segment_selection_controls": "passed", "transition_relation_predecessor_and_delta_controls": "passed", "external_policy_and_pin_boundaries": "passed", "deterministic_decision_and_exit_semantics": "passed", "installed_admission_cli": "passed", "read_only_admission_ci": "passed", "seventeen_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 22,
+      "title": "Pinned audit bundle trust state",
+      "status": "completed",
+      "summary": "Added a consumer-owned canonical hash-chain state that initializes from admitted snapshot bundles and advances only through admitted transition bundles whose previous checkpoint and catalog match the current pinned head.",
+      "verification": {"unit_tests": 384, "python_versions": ["3.11", "3.12"], "compileall": "passed", "canonical_state_and_entry_hashes": "passed", "external_state_id_rollback_pin": "passed", "snapshot_anchor_and_transition_advance": "passed", "admission_decision_and_policy_binding": "passed", "checkpoint_catalog_generation_and_merkle_binding": "passed", "replay_head_mismatch_and_generation_rollback_rejection": "passed", "atomic_lock_coordinated_updates": "passed", "denied_and_invalid_operations_preserve_bytes": "passed", "installed_trust_cli": "passed", "read_only_trust_ci": "passed", "eighteen_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
