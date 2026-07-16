@@ -1,0 +1,141 @@
+name: audit-bundle-trust-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  trust-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise trust aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/trust-venv"
+          BIN="$RUNNER_TEMP/trust-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-trust"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          from agent_audit import ZERO_HASH
+          from agent_audit_admission import canonical_json, default_policy
+          from agent_audit_bundle import _canonical_bytes, create_bundle
+          from agent_audit_catalog import _build_catalog
+          from agent_audit_checkpoint import create_checkpoint, create_proof
+          from agent_audit_consistency import create_consistency_proof
+
+          root = Path.cwd().parent
+          def item(index, previous):
+              return {
+                  "segment_index": index,
+                  "directory": f"segment-{index:04d}",
+                  "segment_id": f"{index:064x}",
+                  "previous_segment_id": previous,
+                  "manifest_sha256": f"{index + 100:064x}",
+                  "segment_sha256": f"{index + 200:064x}",
+                  "head_hash": f"{index + 300:064x}",
+                  "records": index,
+                  "bytes": index * 100,
+              }
+          first = item(1, ZERO_HASH)
+          previous = _build_catalog([first], generation=1, previous_catalog_id=ZERO_HASH)
+          second = item(2, first["segment_id"])
+          candidate = _build_catalog(
+              [first, second],
+              generation=2,
+              previous_catalog_id=previous["catalog_id"],
+          )
+          previous_checkpoint = create_checkpoint(previous)
+          candidate_checkpoint = create_checkpoint(candidate)
+          previous_proof = create_proof(previous, previous_checkpoint, segment_index=1)
+          candidate_proof = create_proof(candidate, candidate_checkpoint, segment_index=2)
+          consistency = create_consistency_proof(
+              previous, previous_checkpoint, candidate, candidate_checkpoint
+          )
+          payloads = {
+              "previous-checkpoint.json": previous_checkpoint,
+              "candidate-checkpoint.json": candidate_checkpoint,
+              "previous-proof.json": previous_proof,
+              "candidate-proof.json": candidate_proof,
+              "consistency.json": consistency,
+          }
+          for name, payload in payloads.items():
+              (root / name).write_bytes(_canonical_bytes(payload))
+          anchor = create_bundle(
+              root / "anchor-bundle",
+              root / "previous-checkpoint.json",
+              previous_checkpoint["checkpoint_id"],
+              [root / "previous-proof.json"],
+          )
+          transition = create_bundle(
+              root / "transition-bundle",
+              root / "candidate-checkpoint.json",
+              candidate_checkpoint["checkpoint_id"],
+              [root / "candidate-proof.json"],
+              previous_checkpoint_path=root / "previous-checkpoint.json",
+              expected_previous_checkpoint_id=previous_checkpoint["checkpoint_id"],
+              consistency_path=root / "consistency.json",
+          )
+          (root / "policy.json").write_bytes(canonical_json(default_policy()))
+          (root / "pins.json").write_text(json.dumps({
+              "anchor_bundle_id": anchor["bundle_id"],
+              "anchor_checkpoint_id": previous_checkpoint["checkpoint_id"],
+              "transition_bundle_id": transition["bundle_id"],
+              "candidate_checkpoint_id": candidate_checkpoint["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+
+          ANCHOR_BUNDLE_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["anchor_bundle_id"])' "$ROOT/pins.json")
+          ANCHOR_CHECKPOINT_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["anchor_checkpoint_id"])' "$ROOT/pins.json")
+          TRANSITION_BUNDLE_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["transition_bundle_id"])' "$ROOT/pins.json")
+          CANDIDATE_CHECKPOINT_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate_checkpoint_id"])' "$ROOT/pins.json")
+
+          "$BIN/basit-agent-audit-trust" init "$ROOT/state.json" "$ROOT/anchor-bundle" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$ANCHOR_BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$ANCHOR_CHECKPOINT_ID" \
+            --format json > "$ROOT/init.json"
+          STATE_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_id"])' "$ROOT/init.json")
+          "$BIN/agent-audit-trust" advance "$ROOT/state.json" "$ROOT/transition-bundle" \
+            --policy "$ROOT/policy.json" \
+            --expected-state-id "$STATE_ID" \
+            --expected-bundle-id "$TRANSITION_BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/advance.json"
+          NEW_STATE_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_id"])' "$ROOT/advance.json")
+          "$BIN/basit-agent-audit-trust" verify "$ROOT/state.json" \
+            --expected-state-id "$NEW_STATE_ID" \
+            --bundle "$ROOT/transition-bundle" \
+            --format json > "$ROOT/verify.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.cwd().parent
+          initialized = json.loads((root / "init.json").read_text())
+          advanced = json.loads((root / "advance.json").read_text())
+          verified = json.loads((root / "verify.json").read_text())
+          assert initialized["head"]["sequence"] == 1
+          assert advanced["advanced"] is True
+          assert advanced["head"]["sequence"] == 2
+          assert verified["valid"] is True
+          assert verified["entries"] == 2
+          assert initialized["state_id"] != advanced["state_id"]
+          PY
