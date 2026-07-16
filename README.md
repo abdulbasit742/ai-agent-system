@@ -17,7 +17,7 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - portable snapshot and transition audit evidence bundles
 - consumer-owned audit bundle admission policies
 - pinned, hash-chained audit bundle trust states
-- portable audit trust-state Merkle checkpoints, per-bundle proofs, and lineage gates
+- portable audit trust-state Merkle checkpoints, per-bundle proofs, lineage gates, and compact consistency proofs
 - reproducible release bundles with deterministic SPDX SBOM and in-toto/SLSA-style provenance
 - release admission, transition, trust-state, checkpoint, and consistency controls
 - destructive-command policy gate and dry-run-first integration dispatcher
@@ -82,6 +82,10 @@ basit-agent-audit-trust verify audit-trust-state.json \
   --bundle current-head-bundle
 basit-agent-audit-trust-checkpoint verify audit-trust-checkpoint.json \
   --expected-checkpoint-id "$TRUST_CHECKPOINT_ID"
+basit-agent-audit-trust-consistency verify audit-trust-consistency.json \
+  retained-trust-checkpoint.json candidate-trust-checkpoint.json \
+  --expected-previous-checkpoint-id "$RETAINED_TRUST_CHECKPOINT_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_TRUST_CHECKPOINT_ID"
 ```
 
 Compatibility aliases are:
@@ -96,8 +100,9 @@ Compatibility aliases are:
 - `agent-audit-admission`
 - `agent-audit-trust`
 - `agent-audit-trust-checkpoint`
+- `agent-audit-trust-consistency`
 
-The wheel has no runtime dependencies and contains only the nineteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, decisions, trust states, trust checkpoints/proofs, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
+The wheel has no runtime dependencies and contains only the twenty reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, decisions, trust states, trust checkpoints/proofs, trust consistency proofs, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
 
 Installed-wheel `doctor` and integration `run` fail closed because external integrations remain source-checkout-only.
 
@@ -313,6 +318,30 @@ agent-audit-trust-checkpoint verify-proof \
 The state may be omitted during proof verification. Supplying `--bundle` fully re-verifies the portable snapshot or transition bundle and binds it to the authenticated trust entry. Lineage accepts only identical or right-descendant states; `ATC010` is rollback and `ATC011` is fork. These artifacts are unsigned and require externally retained state/checkpoint IDs for freshness.
 
 See [docs/audit-trust-checkpoints.md](docs/audit-trust-checkpoints.md) and [docs/security-audit-trust-checkpoints.md](docs/security-audit-trust-checkpoints.md).
+
+## Compact audit trust consistency proofs
+
+A compact proof demonstrates that a candidate audit trust checkpoint retains every trust entry committed by a retained checkpoint. Creation validates both complete states; verification needs only the proof and the two externally pinned checkpoints.
+
+```bash
+basit-agent-audit-trust-consistency prove \
+  retained-state.json retained-checkpoint.json \
+  candidate-state.json candidate-checkpoint.json \
+  audit-trust-consistency.json \
+  --expected-previous-state-id "$RETAINED_STATE_ID" \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-state-id "$CANDIDATE_STATE_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+
+agent-audit-trust-consistency verify \
+  audit-trust-consistency.json retained-checkpoint.json candidate-checkpoint.json \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+```
+
+Both Merkle roots are reconstructed from canonical compact frontiers. Descendant proofs authenticate the first appended transition against the retained head. `ATK009` is rollback, `ATK010` is fork, and `ATK011` is invalid transition-boundary continuity. Denied creation never writes a proof file.
+
+See [docs/audit-trust-consistency.md](docs/audit-trust-consistency.md) and [docs/security-audit-trust-consistency.md](docs/security-audit-trust-consistency.md).
 
 ## Pull-request change gates
 
