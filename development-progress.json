@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 6,
-    "next_expected": 7
+    "latest_completed": 7,
+    "next_expected": 8
   },
   "completed": [
     {
@@ -110,6 +110,27 @@
         "canonical_version_source": "passed",
         "source_only_integration_boundary": "passed",
         "installed_self_scan_active_findings": 0,
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 7,
+      "title": "Reproducible release evidence",
+      "status": "completed",
+      "summary": "Added deterministic release bundles, canonical source identity, byte-for-byte wheel comparison, SHA-256 checksums, manifest integrity verification, and a read-only non-publishing release-readiness workflow.",
+      "verification": {
+        "unit_tests": 95,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "byte_for_byte_wheel_reproducibility": "passed",
+        "release_bundle_creation": "passed",
+        "release_bundle_verification": "passed",
+        "canonical_manifest_integrity": "passed",
+        "sha256_checksums": "passed",
+        "exact_source_commit_and_epoch": "passed",
+        "tamper_and_extra_file_rejection": "passed",
+        "read_only_non_publishing_ci": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

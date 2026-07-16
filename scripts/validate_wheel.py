@@ -5,13 +5,20 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import zipfile
 from email.parser import Parser
 from pathlib import Path
 from typing import Any
 
+try:
+    from agent_version import __version__
+except ModuleNotFoundError:  # Direct execution via `python scripts/validate_wheel.py`.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from agent_version import __version__
+
 EXPECTED_NAME = "basit-agent-system"
-EXPECTED_VERSION = "0.1.0"
+EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
     "agent_baseline.py",
     "agent_changed_lines.py",

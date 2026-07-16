@@ -11,6 +11,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - added-line-only regression gates for low-noise reviews
 - first-party GitHub Action with annotations, job summaries, JSON, SARIF, and structured outputs
 - installable dependency-free Python package with reviewed wheel contents and console commands
+- reproducible release evidence with exact source identity, canonical manifests, and SHA-256 checksums
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -67,6 +68,35 @@ python scripts/validate_wheel.py dist/*.whl
 ```
 
 See [docs/python-distribution.md](docs/python-distribution.md), [docs/security-audit-python-distribution.md](docs/security-audit-python-distribution.md), and [CHANGELOG.md](CHANGELOG.md).
+
+## Reproducible release evidence
+
+Build the same reviewed source twice with one deterministic source epoch:
+
+```bash
+export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+python -m pip wheel . --no-deps --wheel-dir dist-one
+python -m pip wheel . --no-deps --wheel-dir dist-two
+python scripts/release_bundle.py compare dist-one/*.whl dist-two/*.whl
+```
+
+Create and verify a release evidence bundle:
+
+```bash
+python scripts/release_bundle.py create \
+  --wheel dist-one/*.whl \
+  --output-dir release \
+  --source-commit "$(git rev-parse HEAD)" \
+  --source-date-epoch "$SOURCE_DATE_EPOCH"
+
+python scripts/release_bundle.py verify release
+```
+
+A verified bundle contains only the reviewed wheel, `release-manifest.json`, and `SHA256SUMS`. The manifest records the exact source commit, deterministic source timestamp, package identity, artifact size, wheel metadata, SHA-256 digest, and a canonical `release_id`. Extra files, symlinks, tampering, checksum drift, metadata drift, or byte-different builds fail closed.
+
+CI uploads the verified bundle only as a read-only workflow artifact. It does not publish to a package registry, create a GitHub Release, request OIDC credentials, or read registry secrets.
+
+See [docs/reproducible-releases.md](docs/reproducible-releases.md) and [docs/security-audit-reproducible-releases.md](docs/security-audit-reproducible-releases.md).
 
 ## GitHub Action
 
@@ -263,8 +293,11 @@ python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --ba
 python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
 python -m unittest discover -s tests -p "test_github_action.py" -v
 python -m unittest discover -s tests -p "test_packaging.py" -v
+python -m unittest discover -s tests -p "test_release_bundle.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
+python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
+python scripts/release_bundle.py verify release
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```
