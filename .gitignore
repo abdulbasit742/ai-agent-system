@@ -8,6 +8,8 @@ build/
 release/
 dist-one/
 dist-two/
+dist-admission/
+release-admission/
 .env
 .env.*
 !.env.example
