@@ -1,0 +1,169 @@
+name: audit-trust-receiver-checkpoint-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  receiver-checkpoint-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise both receiver checkpoint aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/receiver-checkpoint-venv"
+          BIN="$RUNNER_TEMP/receiver-checkpoint-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-trust-receiver-checkpoint"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+          ROOT="$ROOT" "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit_trust import append_transition, canonical_json, create_state
+          from agent_audit_trust_admission import default_policy
+          from agent_audit_trust_bundle import create_bundle
+          from agent_audit_trust_checkpoint import create_checkpoint, create_proof
+          from agent_audit_trust_consistency import create_consistency_proof
+
+          root = Path(os.environ["ROOT"])
+          def h(value): return f"{value:064x}"
+          def admission(verified, decision):
+              candidate = verified["candidate"]
+              previous = verified.get("previous")
+              return {
+                  "admitted": True,
+                  "policy_sha256": h(7000 + decision),
+                  "decision_id": h(8000 + decision),
+                  "identity": {
+                      "bundle_id": verified["bundle_id"],
+                      "bundle_type": verified["bundle_type"],
+                      "candidate_checkpoint_id": candidate["checkpoint_id"],
+                      "candidate_catalog_id": candidate["catalog_id"],
+                      "previous_checkpoint_id": previous["checkpoint_id"] if previous else None,
+                      "previous_catalog_id": previous["catalog_id"] if previous else None,
+                  },
+                  "evidence": {
+                      "files": verified["files"], "bytes": verified["bytes"],
+                      "proof_count": verified["proof_count"],
+                      "sealed_segment_count": 0,
+                      "selected_segment_indexes": [candidate["segment_count"]],
+                      "selected_segment_ids": [h(6000 + decision)],
+                      "sealed_segment_indexes": [],
+                      "candidate_generation": candidate["generation"],
+                      "candidate_segment_count": candidate["segment_count"],
+                      "generation_delta": candidate["generation"] - previous["generation"] if previous else None,
+                  },
+                  "violations": [],
+              }
+          snapshot = {
+              "valid": True, "bundle_id": h(1001), "bundle_type": "snapshot",
+              "candidate": {"checkpoint_id": h(2001), "catalog_id": h(3001),
+                            "generation": 1, "segment_count": 1, "merkle_root": h(4001)},
+              "previous": None, "consistency": None, "proof_count": 1,
+              "segment_count": 0, "proof_ids": [h(5001)], "segment_ids": [h(6001)],
+              "files": 4, "bytes": 1000,
+          }
+          retained = create_state(admission(snapshot, 1), snapshot)
+          retained_head = retained["head"]
+          transition = {
+              "valid": True, "bundle_id": h(1002), "bundle_type": "transition",
+              "candidate": {"checkpoint_id": h(2002), "catalog_id": h(3002),
+                            "generation": 2, "segment_count": 2, "merkle_root": h(4002)},
+              "previous": {"checkpoint_id": retained_head["checkpoint_id"],
+                           "catalog_id": retained_head["catalog_id"],
+                           "generation": retained_head["generation"],
+                           "segment_count": retained_head["segment_count"],
+                           "merkle_root": retained["entries"][-1]["evidence"]["merkle_root"]},
+              "consistency": {"consistency_id": h(9002), "relation": "right-descendant",
+                              "direct_predecessor_verified": True},
+              "proof_count": 1, "segment_count": 0, "proof_ids": [h(5002)],
+              "segment_ids": [h(6002)], "files": 7, "bytes": 2000,
+          }
+          candidate = append_transition(retained, admission(transition, 2), transition)
+          retained_cp = create_checkpoint(retained)
+          candidate_cp = create_checkpoint(candidate)
+          retained_proof = create_proof(retained, retained_cp, sequence=retained_cp["entry_count"])
+          candidate_proof = create_proof(candidate, candidate_cp, sequence=candidate_cp["entry_count"])
+          consistency = create_consistency_proof(retained, retained_cp, candidate, candidate_cp)
+          for name, payload in {
+              "retained-checkpoint.json": retained_cp,
+              "candidate-checkpoint.json": candidate_cp,
+              "retained-proof.json": retained_proof,
+              "candidate-proof.json": candidate_proof,
+              "consistency.json": consistency,
+          }.items():
+              (root / name).write_bytes(canonical_json(payload))
+          snapshot_manifest = create_bundle(
+              root / "snapshot-handoff", root / "retained-checkpoint.json",
+              retained_cp["checkpoint_id"], [root / "retained-proof.json"],
+          )
+          transition_manifest = create_bundle(
+              root / "transition-handoff", root / "candidate-checkpoint.json",
+              candidate_cp["checkpoint_id"], [root / "candidate-proof.json"],
+              previous_checkpoint_path=root / "retained-checkpoint.json",
+              expected_previous_checkpoint_id=retained_cp["checkpoint_id"],
+              consistency_path=root / "consistency.json",
+          )
+          (root / "policy.json").write_bytes(canonical_json(default_policy()))
+          (root / "pins.json").write_text(json.dumps({
+              "snapshot_bundle": snapshot_manifest["bundle_id"],
+              "snapshot_checkpoint": retained_cp["checkpoint_id"],
+              "transition_bundle": transition_manifest["bundle_id"],
+              "transition_checkpoint": candidate_cp["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          pin() { "$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          SNAPSHOT_BUNDLE=$(pin snapshot_bundle)
+          SNAPSHOT_CHECKPOINT=$(pin snapshot_checkpoint)
+          TRANSITION_BUNDLE=$(pin transition_bundle)
+          TRANSITION_CHECKPOINT=$(pin transition_checkpoint)
+          "$BIN/basit-agent-audit-trust-receiver" init "$ROOT/receiver.json" "$ROOT/snapshot-handoff" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$SNAPSHOT_BUNDLE" \
+            --expected-candidate-checkpoint-id "$SNAPSHOT_CHECKPOINT" \
+            --format json > "$ROOT/init.json"
+          STATE=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_id"])' "$ROOT/init.json")
+          "$BIN/agent-audit-trust-receiver" advance "$ROOT/receiver.json" "$ROOT/transition-handoff" \
+            --policy "$ROOT/policy.json" \
+            --expected-state-id "$STATE" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
+            --format json > "$ROOT/advance.json"
+          UPDATED=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_id"])' "$ROOT/advance.json")
+          "$BIN/basit-agent-audit-trust-receiver-checkpoint" create \
+            "$ROOT/receiver.json" "$ROOT/receiver-checkpoint.json" \
+            --expected-state-id "$UPDATED" --format json > "$ROOT/checkpoint.json"
+          RECEIVER_CHECKPOINT=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/checkpoint.json")
+          "$BIN/agent-audit-trust-receiver-checkpoint" prove \
+            "$ROOT/receiver.json" "$ROOT/receiver-checkpoint.json" "$ROOT/receiver-proof.json" \
+            --expected-state-id "$UPDATED" \
+            --expected-checkpoint-id "$RECEIVER_CHECKPOINT" \
+            --handoff-bundle-id "$TRANSITION_BUNDLE" --format json > "$ROOT/prove.json"
+          rm "$ROOT/receiver.json"
+          "$BIN/basit-agent-audit-trust-receiver-checkpoint" verify-proof \
+            "$ROOT/receiver-proof.json" "$ROOT/receiver-checkpoint.json" \
+            --expected-checkpoint-id "$RECEIVER_CHECKPOINT" \
+            --handoff "$ROOT/transition-handoff" --format json > "$ROOT/verify-proof.json"
+          "$BIN/python" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["handoff_verified"] and d["entry"]["sequence"]==2' "$ROOT/verify-proof.json"
+      - name: Preserve installed receiver checkpoint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-checkpoint-package-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/installed-audit-trust-receiver-checkpoint/
+          if-no-files-found: warn
