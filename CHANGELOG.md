@@ -25,7 +25,10 @@ All notable public distribution changes are recorded here.
 - canonical unsigned Merkle checkpoints with externally retained `checkpoint_id` freshness pins
 - portable inclusion proofs for individual trusted releases without distributing the complete history
 - stable `CHK010` rollback and `CHK011` fork lineage denials with common-prefix diagnostics
-- read-only CI release-readiness, admission, transition, trust-state, and checkpoint artifacts with no publication, signing key, OIDC request, or registry credentials
+- compact append-only consistency proofs that reconstruct retained and candidate checkpoint roots from `O(log n)` hashes
+- canonical aligned power-of-two prefix/suffix frontiers with rehashed-layout and subtree-tamper rejection
+- stable `CNS010` rollback and `CNS011` fork denials that never create proof artifacts
+- read-only CI release-readiness, admission, transition, trust-state, checkpoint, and consistency artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
