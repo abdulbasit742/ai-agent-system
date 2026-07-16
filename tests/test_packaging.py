@@ -53,7 +53,7 @@ class PackagingTests(unittest.TestCase):
         error = io.StringIO()
         with mock.patch("agent_cli._source_checkout_available", return_value=False):
             with contextlib.redirect_stderr(error):
-                status = agent_cli.main(["run", "workflow-warden"])
+                status = agent_cli.main(["run", "missing-integration"])
         self.assertEqual(2, status)
         self.assertIn("requires a source checkout", error.getvalue())
 
@@ -69,36 +69,33 @@ class PackagingTests(unittest.TestCase):
             {"attr": "agent_version.__version__"},
             payload["tool"]["setuptools"]["dynamic"]["version"],
         )
-        self.assertEqual(
-            {
-                "agent-audit-admission", "agent-audit-bundle", "agent-audit-catalog",
-                "agent-audit-catalog-checkpoint", "agent-audit-catalog-consistency",
-                "agent-audit-segments", "agent-audit-trust",
-                "agent-audit-trust-checkpoint", "agent-audit-trust-consistency",
-                "agent-audit-trust-bundle", "agent-audit-trust-admission",
-                "agent-changed-lines", "agent-system", "basit-agent",
-                "basit-agent-audit-admission", "basit-agent-audit-bundle",
-                "basit-agent-audit-trust", "basit-agent-audit-trust-checkpoint",
-                "basit-agent-audit-trust-consistency", "basit-agent-audit-trust-bundle",
-                "basit-agent-audit-trust-admission", "basit-agent-catalog",
-                "basit-agent-catalog-checkpoint", "basit-agent-catalog-consistency",
-                "basit-agent-lines", "basit-agent-segments",
-            },
-            set(project["scripts"]),
-        )
-        self.assertEqual(
-            {
-                "agent_audit", "agent_audit_admission", "agent_audit_bundle",
-                "agent_audit_catalog", "agent_audit_checkpoint", "agent_audit_consistency",
-                "agent_audit_events", "agent_audit_segments", "agent_audit_trust",
-                "agent_audit_trust_checkpoint", "agent_audit_trust_consistency",
-                "agent_audit_trust_bundle", "agent_audit_trust_bundle_core",
-                "agent_audit_trust_admission", "agent_baseline", "agent_changed_lines",
-                "agent_cli", "agent_config", "agent_git", "agent_policy", "agent_system",
-                "agent_system_legacy", "agent_version",
-            },
-            set(setuptools["py-modules"]),
-        )
+        expected_scripts = {
+            "agent-audit-admission", "agent-audit-bundle", "agent-audit-catalog",
+            "agent-audit-catalog-checkpoint", "agent-audit-catalog-consistency",
+            "agent-audit-segments", "agent-audit-trust", "agent-audit-trust-checkpoint",
+            "agent-audit-trust-consistency", "agent-audit-trust-bundle",
+            "agent-audit-trust-admission", "agent-audit-trust-receiver",
+            "agent-changed-lines", "agent-system", "basit-agent",
+            "basit-agent-audit-admission", "basit-agent-audit-bundle",
+            "basit-agent-audit-trust", "basit-agent-audit-trust-checkpoint",
+            "basit-agent-audit-trust-consistency", "basit-agent-audit-trust-bundle",
+            "basit-agent-audit-trust-admission", "basit-agent-audit-trust-receiver",
+            "basit-agent-catalog", "basit-agent-catalog-checkpoint",
+            "basit-agent-catalog-consistency", "basit-agent-lines", "basit-agent-segments",
+        }
+        self.assertEqual(expected_scripts, set(project["scripts"]))
+        expected_modules = {
+            "agent_audit", "agent_audit_admission", "agent_audit_bundle",
+            "agent_audit_catalog", "agent_audit_checkpoint", "agent_audit_consistency",
+            "agent_audit_events", "agent_audit_segments", "agent_audit_trust",
+            "agent_audit_trust_checkpoint", "agent_audit_trust_consistency",
+            "agent_audit_trust_bundle", "agent_audit_trust_bundle_core",
+            "agent_audit_trust_admission", "agent_audit_trust_receiver",
+            "agent_baseline", "agent_changed_lines", "agent_cli", "agent_config",
+            "agent_git", "agent_policy", "agent_system", "agent_system_legacy",
+            "agent_version",
+        }
+        self.assertEqual(expected_modules, set(setuptools["py-modules"]))
 
 
 if __name__ == "__main__":
