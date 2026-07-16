@@ -1,0 +1,226 @@
+name: release-consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  consistency-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test compact Merkle consistency proofs
+        run: python -m unittest discover -s tests -p "test_release_consistency.py" -v
+      - name: Compile consistency tooling
+        run: python -m compileall -q scripts/release_consistency.py tests/test_release_consistency.py
+
+  consistency-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build retained, descendant, and fork trust states
+        id: evidence
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import hashlib
+          import os
+          from pathlib import Path
+
+          from scripts.release_checkpoint import canonical_json, create_checkpoint
+          from scripts.release_trust import append_transition, canonical_json as trust_json, create_state
+
+          root = Path(os.environ['RUNNER_TEMP'])
+
+          def digest(label, length=64):
+              return hashlib.sha256(label.encode()).hexdigest()[:length]
+
+          def release(number, marker):
+              return {
+                  'project': 'basit-agent-system',
+                  'version': f'1.{number - 1}.0',
+                  'release_id': digest(f'release-{marker}-{number}'),
+                  'source_commit': digest(f'commit-{marker}-{number}', 40),
+                  'source_date_epoch': 100 + number,
+              }
+
+          def accepted(previous, candidate, marker):
+              return {
+                  'accepted': True,
+                  'transition_id': digest(f'transition-{marker}'),
+                  'policy': {'sha256': digest(f'policy-{marker}')},
+                  'previous': {'release_id': previous['release_id']},
+                  'candidate': {'release_id': candidate['release_id']},
+              }
+
+          anchor = release(1, 'anchor')
+          retained = create_state(anchor)
+          retained_release = release(2, 'retained')
+          retained = append_transition(
+              retained, retained_release, accepted(anchor, retained_release, 'retained')
+          )
+
+          descendant = retained
+          previous = retained_release
+          for number in range(3, 12):
+              candidate = release(number, 'descendant')
+              descendant = append_transition(
+                  descendant, candidate, accepted(previous, candidate, f'descendant-{number}')
+              )
+              previous = candidate
+
+          fork = create_state(anchor)
+          fork_release = release(2, 'fork')
+          fork = append_transition(fork, fork_release, accepted(anchor, fork_release, 'fork'))
+
+          for name, state in (
+              ('retained', retained), ('descendant', descendant), ('fork', fork)
+          ):
+              checkpoint = create_checkpoint(state)
+              (root / f'{name}-state.json').write_bytes(trust_json(state))
+              (root / f'{name}-checkpoint.json').write_bytes(canonical_json(checkpoint))
+              print(f'{name}_state_id={state["state_id"]}')
+              print(f'{name}_checkpoint_id={checkpoint["checkpoint_id"]}')
+          PY
+      - name: Create compact descendant proof and denial decisions
+        env:
+          RETAINED_STATE_ID: ${{ steps.evidence.outputs.retained_state_id }}
+          DESCENDANT_STATE_ID: ${{ steps.evidence.outputs.descendant_state_id }}
+          FORK_STATE_ID: ${{ steps.evidence.outputs.fork_state_id }}
+          RETAINED_CHECKPOINT_ID: ${{ steps.evidence.outputs.retained_checkpoint_id }}
+          DESCENDANT_CHECKPOINT_ID: ${{ steps.evidence.outputs.descendant_checkpoint_id }}
+          FORK_CHECKPOINT_ID: ${{ steps.evidence.outputs.fork_checkpoint_id }}
+        run: |
+          python scripts/release_consistency.py prove \
+            "$RUNNER_TEMP/retained-state.json" \
+            "$RUNNER_TEMP/retained-checkpoint.json" \
+            "$RUNNER_TEMP/descendant-state.json" \
+            "$RUNNER_TEMP/descendant-checkpoint.json" \
+            "$RUNNER_TEMP/consistency-proof.json" \
+            --expected-previous-state-id "$RETAINED_STATE_ID" \
+            --expected-candidate-state-id "$DESCENDANT_STATE_ID" \
+            --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+            --expected-candidate-checkpoint-id "$DESCENDANT_CHECKPOINT_ID" \
+            > "$RUNNER_TEMP/consistency-create.json"
+
+          set +e
+          python scripts/release_consistency.py prove \
+            "$RUNNER_TEMP/descendant-state.json" \
+            "$RUNNER_TEMP/descendant-checkpoint.json" \
+            "$RUNNER_TEMP/retained-state.json" \
+            "$RUNNER_TEMP/retained-checkpoint.json" \
+            "$RUNNER_TEMP/rollback-proof.json" \
+            --expected-previous-state-id "$DESCENDANT_STATE_ID" \
+            --expected-candidate-state-id "$RETAINED_STATE_ID" \
+            --expected-previous-checkpoint-id "$DESCENDANT_CHECKPOINT_ID" \
+            --expected-candidate-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+            > "$RUNNER_TEMP/rollback-decision.json"
+          ROLLBACK_STATUS=$?
+          python scripts/release_consistency.py prove \
+            "$RUNNER_TEMP/retained-state.json" \
+            "$RUNNER_TEMP/retained-checkpoint.json" \
+            "$RUNNER_TEMP/fork-state.json" \
+            "$RUNNER_TEMP/fork-checkpoint.json" \
+            "$RUNNER_TEMP/fork-proof.json" \
+            --expected-previous-state-id "$RETAINED_STATE_ID" \
+            --expected-candidate-state-id "$FORK_STATE_ID" \
+            --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+            --expected-candidate-checkpoint-id "$FORK_CHECKPOINT_ID" \
+            > "$RUNNER_TEMP/fork-decision.json"
+          FORK_STATUS=$?
+          set -e
+
+          test "$ROLLBACK_STATUS" -eq 1
+          test "$FORK_STATUS" -eq 1
+          test ! -e "$RUNNER_TEMP/rollback-proof.json"
+          test ! -e "$RUNNER_TEMP/fork-proof.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          rollback = json.loads((root / 'rollback-decision.json').read_text())
+          fork = json.loads((root / 'fork-decision.json').read_text())
+          assert rollback['violations'][0]['rule_id'] == 'CNS010'
+          assert fork['violations'][0]['rule_id'] == 'CNS011'
+          PY
+      - name: Verify proof without trust-state history
+        env:
+          RETAINED_CHECKPOINT_ID: ${{ steps.evidence.outputs.retained_checkpoint_id }}
+          DESCENDANT_CHECKPOINT_ID: ${{ steps.evidence.outputs.descendant_checkpoint_id }}
+        run: |
+          rm "$RUNNER_TEMP/retained-state.json" "$RUNNER_TEMP/descendant-state.json"
+          python scripts/release_consistency.py verify \
+            "$RUNNER_TEMP/consistency-proof.json" \
+            "$RUNNER_TEMP/retained-checkpoint.json" \
+            "$RUNNER_TEMP/descendant-checkpoint.json" \
+            --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+            --expected-candidate-checkpoint-id "$DESCENDANT_CHECKPOINT_ID" \
+            > "$RUNNER_TEMP/consistency-verify.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          result = json.loads((root / 'consistency-verify.json').read_text())
+          assert result['valid'] is True
+          assert result['accepted'] is True
+          assert result['relation'] == 'right-descendant'
+          assert result['proof_hashes'] < result['candidate']['entry_count']
+          PY
+      - name: Reject rehashed compact-proof tampering
+        env:
+          RETAINED_CHECKPOINT_ID: ${{ steps.evidence.outputs.retained_checkpoint_id }}
+          DESCENDANT_CHECKPOINT_ID: ${{ steps.evidence.outputs.descendant_checkpoint_id }}
+        run: |
+          cp "$RUNNER_TEMP/consistency-proof.json" "$RUNNER_TEMP/tampered-consistency.json"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          from scripts.release_checkpoint import canonical_json
+
+          path = Path(os.environ['RUNNER_TEMP'], 'tampered-consistency.json')
+          proof = json.loads(path.read_text())
+          proof['append_frontier'][0]['hash'] = 'f' * 64
+          core = dict(proof)
+          core.pop('consistency_id')
+          proof['consistency_id'] = hashlib.sha256(canonical_json(core)).hexdigest()
+          path.write_bytes(canonical_json(proof))
+          PY
+          set +e
+          python scripts/release_consistency.py verify \
+            "$RUNNER_TEMP/tampered-consistency.json" \
+            "$RUNNER_TEMP/retained-checkpoint.json" \
+            "$RUNNER_TEMP/descendant-checkpoint.json" \
+            --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+            --expected-candidate-checkpoint-id "$DESCENDANT_CHECKPOINT_ID" \
+            > "$RUNNER_TEMP/tamper-output.txt" 2>&1
+          STATUS=$?
+          set -e
+          test "$STATUS" -eq 2
+      - name: Preserve compact consistency evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-consistency-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/consistency-proof.json
+            ${{ runner.temp }}/consistency-create.json
+            ${{ runner.temp }}/consistency-verify.json
+            ${{ runner.temp }}/rollback-decision.json
+            ${{ runner.temp }}/fork-decision.json
+          if-no-files-found: error

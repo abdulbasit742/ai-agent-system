@@ -14,6 +14,8 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
 - consumer release-admission policies and verified release-transition rollback gates
 - pinned, hash-chained consumer release trust states
+- portable Merkle checkpoints and individual release inclusion proofs
+- compact append-only consistency proofs between externally pinned checkpoints
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - dry-run-first integration dispatcher
@@ -180,6 +182,49 @@ Each entry binds the release identity, previous entry hash, accepted transition 
 
 The state file alone does not prove freshness: consumers must protect the latest returned `state_id` separately. See [docs/release-trust-state.md](docs/release-trust-state.md) and [docs/security-audit-release-trust.md](docs/security-audit-release-trust.md).
 
+## Merkle checkpoints, inclusion proofs, and consistency proofs
+
+Create a portable checkpoint for one pinned trust state:
+
+```bash
+python scripts/release_checkpoint.py create \
+  release-trust-state.json \
+  release-checkpoint.json \
+  --expected-state-id "$EXPECTED_STATE_ID"
+```
+
+An inclusion proof demonstrates that one release entry belongs to one checkpoint. A compact consistency proof demonstrates that a candidate checkpoint is identical to or an append-only descendant of a retained checkpoint.
+
+Create compact consistency evidence from the complete states:
+
+```bash
+python scripts/release_consistency.py prove \
+  retained-state.json \
+  retained-checkpoint.json \
+  candidate-state.json \
+  candidate-checkpoint.json \
+  release-consistency-proof.json \
+  --expected-previous-state-id "$RETAINED_STATE_ID" \
+  --expected-candidate-state-id "$CANDIDATE_STATE_ID" \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+```
+
+Verify later without distributing either full trust-state history:
+
+```bash
+python scripts/release_consistency.py verify \
+  release-consistency-proof.json \
+  retained-checkpoint.json \
+  candidate-checkpoint.json \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+```
+
+The proof carries canonical maximal aligned power-of-two frontiers and normally contains only `O(log n)` hashes. Verification independently reconstructs both pinned Merkle roots. A recalculated `consistency_id` cannot hide changed subtree hashes or a non-canonical range layout. Rollback and fork requests return `CNS010` or `CNS011`, exit with status `1`, and do not create proof files.
+
+Checkpoints and consistency proofs are intentionally unsigned. They prove internal Merkle relationships, not producer identity. Consumers must protect checkpoint IDs separately. See [docs/release-checkpoints.md](docs/release-checkpoints.md), [docs/release-consistency.md](docs/release-consistency.md), [docs/security-audit-release-checkpoints.md](docs/security-audit-release-checkpoints.md), and [docs/security-audit-release-consistency.md](docs/security-audit-release-consistency.md).
+
 ## GitHub Action
 
 A repository can run the control plane directly in a read-only pull-request workflow:
@@ -297,6 +342,8 @@ python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m unittest discover -s tests -p "test_release_admission.py" -v
 python -m unittest discover -s tests -p "test_release_transition.py" -v
 python -m unittest discover -s tests -p "test_release_trust.py" -v
+python -m unittest discover -s tests -p "test_release_checkpoint.py" -v
+python -m unittest discover -s tests -p "test_release_consistency.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
