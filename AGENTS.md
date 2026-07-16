@@ -11,15 +11,18 @@
 - Baselines may match only exact scanner fingerprints, must omit finding evidence, and must fail closed when their integrity or control scope changes.
 - Git change scopes must use read-only argument-array commands, resolved commit SHAs, merge-base semantics, NUL-delimited path parsing, and repository-bound path validation.
 - Changed-scope baseline resolution must never classify unrelated baseline paths as resolved.
+- Added-line gates must filter current findings with new-side ranges and baseline resolutions with old-side ranges; never reuse one coordinate system for both.
+- Pure renames must remain silent in added-line mode unless content hunks exist. Added/copied files are full new-file scope and deleted files are full old-file resolution scope.
 
 Verification:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
 python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
+python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
 python agent_system.py scan . --format json --fail-on high
 ```
