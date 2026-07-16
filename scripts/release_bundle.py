@@ -13,13 +13,23 @@ from pathlib import Path
 from typing import Any, Iterable
 
 try:
+    from scripts.supply_chain_evidence import (
+        SupplyChainEvidenceError,
+        create_evidence,
+        verify_evidence,
+    )
     from scripts.validate_wheel import WheelValidationError, validate_wheel
 except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from supply_chain_evidence import (
+        SupplyChainEvidenceError,
+        create_evidence,
+        verify_evidence,
+    )
     from validate_wheel import WheelValidationError, validate_wheel
 
 MANIFEST_NAME = "release-manifest.json"
 CHECKSUMS_NAME = "SHA256SUMS"
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 WHEEL_MEDIA_TYPE = "application/vnd.pypa.wheel+zip"
 HEX_40 = re.compile(r"^[0-9a-f]{40}$")
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
@@ -113,15 +123,25 @@ def _wheel_identity(summary: dict[str, Any]) -> dict[str, Any]:
     return {key: summary[key] for key in keys}
 
 
-def _artifact_record(path: Path, wheel_summary: dict[str, Any]) -> dict[str, Any]:
+def _artifact_record(
+    path: Path,
+    wheel_summary: dict[str, Any],
+    evidence: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     identity = _wheel_identity(wheel_summary)
     return {
         "filename": path.name,
         "media_type": WHEEL_MEDIA_TYPE,
         "sha256": sha256_file(path),
         "size": path.stat().st_size,
+        "evidence": evidence,
         **identity,
     }
+
+
+def _evidence_records(record: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence = record["evidence"]
+    return [evidence["sbom"], evidence["provenance"]]
 
 
 def create_bundle(
@@ -159,9 +179,10 @@ def create_bundle(
         for path, summary in validated:
             target = destination / path.name
             shutil.copyfile(path, target, follow_symlinks=False)
-            records.append(_artifact_record(target, summary))
-    except OSError as exc:
-        raise ReleaseBundleError(f"unable to copy release artifact: {exc}") from exc
+            evidence = create_evidence(target, summary, commit, epoch, destination)
+            records.append(_artifact_record(target, summary, evidence))
+    except (OSError, SupplyChainEvidenceError) as exc:
+        raise ReleaseBundleError(f"unable to create release evidence: {exc}") from exc
 
     manifest: dict[str, Any] = {
         "manifest_version": MANIFEST_VERSION,
@@ -178,9 +199,13 @@ def create_bundle(
     manifest_path = destination / MANIFEST_NAME
     try:
         manifest_path.write_bytes(_canonical_json(manifest))
-        checksum_lines = [
-            f"{record['sha256']}  {record['filename']}" for record in records
-        ]
+        checksum_lines = []
+        for record in records:
+            checksum_lines.append(f"{record['sha256']}  {record['filename']}")
+            checksum_lines.extend(
+                f"{item['sha256']}  {item['filename']}"
+                for item in _evidence_records(record)
+            )
         checksum_lines.append(f"{sha256_file(manifest_path)}  {MANIFEST_NAME}")
         (destination / CHECKSUMS_NAME).write_text(
             "\n".join(sorted(checksum_lines)) + "\n", encoding="utf-8"
@@ -247,6 +272,7 @@ def _validate_record(record: dict[str, Any]) -> str:
         "modules",
         "console_scripts",
         "runtime_dependencies",
+        "evidence",
     }
     if set(record) != required:
         raise ReleaseBundleError("release artifact record fields do not match the reviewed schema")
@@ -274,6 +300,10 @@ def _validate_record(record: dict[str, Any]) -> str:
         raise ReleaseBundleError("release artifact console script list is malformed")
     if record["runtime_dependencies"] != 0:
         raise ReleaseBundleError("release artifact must remain runtime-dependency-free")
+    if not isinstance(record["evidence"], dict) or set(record["evidence"]) != {
+        "sbom", "provenance"
+    }:
+        raise ReleaseBundleError("release artifact evidence is malformed")
     return name
 
 
@@ -300,6 +330,7 @@ def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
         raise ReleaseBundleError("release manifest must contain at least one artifact")
     expected_names = {MANIFEST_NAME, CHECKSUMS_NAME}
     seen_names: set[str] = set()
+    evidence_count = 0
     for record in artifacts:
         if not isinstance(record, dict):
             raise ReleaseBundleError("release artifact records must be objects")
@@ -329,6 +360,21 @@ def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
             raise ReleaseBundleError(f"release artifact metadata mismatch: {name}")
         if record["project"] != manifest["project"] or record["version"] != manifest["version"]:
             raise ReleaseBundleError("release artifact project/version differs from manifest")
+        try:
+            evidence_names = verify_evidence(
+                directory,
+                artifact,
+                summary,
+                commit,
+                epoch,
+                record["evidence"],
+            )
+        except SupplyChainEvidenceError as exc:
+            raise ReleaseBundleError(str(exc)) from exc
+        if expected_names & evidence_names:
+            raise ReleaseBundleError("release evidence filenames collide with bundle files")
+        expected_names.update(evidence_names)
+        evidence_count += len(evidence_names)
 
     actual_names = {path.name for path in directory.iterdir()}
     if actual_names != expected_names:
@@ -353,6 +399,7 @@ def verify_bundle(bundle_dir: Path) -> dict[str, Any]:
         "source_commit": commit,
         "source_date_epoch": epoch,
         "artifacts": len(artifacts),
+        "evidence_files": evidence_count,
         "files": sorted(expected_names),
     }
 
