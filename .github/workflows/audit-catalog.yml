@@ -1,0 +1,179 @@
+name: audit-catalog
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  catalog-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test audit segment catalog
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_catalog.py" -v \
+            > "$RUNNER_TEMP/audit-catalog-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 180 "$RUNNER_TEMP/audit-catalog-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-catalog-tests.log"
+      - name: Re-run segment and audit regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_segments.py" -v
+          python -m unittest discover -s tests -p "test_agent_audit.py" -v
+          python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
+      - name: Compile catalog runtime
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_system.py tests/test_audit_catalog.py
+      - name: Preserve catalog test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-catalog-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-catalog-tests.log
+          if-no-files-found: warn
+
+  catalog-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build, stale-check, synchronize, and verify catalog
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-catalog"
+          ARCHIVE="$ROOT/segments"
+          ACTIVE="$ROOT/active.jsonl"
+          CATALOG="$ARCHIVE/catalog.json"
+          mkdir -p "$ARCHIVE"
+
+          python agent_system.py --audit-log "$ACTIVE" scan . \
+            --format json --fail-on high --output "$ROOT/scan-one.json"
+          python agent_audit_segments.py rotate \
+            --path "$ACTIVE" --output-dir "$ARCHIVE/z-oldest" --format json \
+            > "$ROOT/rotate-one.json"
+          python agent_system.py --audit-log "$ACTIVE" guard python -m unittest \
+            > "$ROOT/guard.json"
+          python agent_audit_segments.py rotate \
+            --path "$ACTIVE" --output-dir "$ARCHIVE/a-newest" --format json \
+            > "$ROOT/rotate-two.json"
+
+          python agent_audit_catalog.py init "$CATALOG" --active "$ACTIVE" --format json \
+            > "$ROOT/catalog-one.json"
+          CATALOG_ONE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-one.json")
+          python agent_audit_catalog.py verify "$CATALOG" \
+            --expected-catalog-id "$CATALOG_ONE" --active "$ACTIVE" --format json \
+            > "$ROOT/verify-one.json"
+
+          python agent_system.py --audit-log "$ACTIVE" scrub README.md \
+            --output "$ROOT/readme.scrubbed" > "$ROOT/scrub.json"
+          python agent_audit_segments.py rotate \
+            --path "$ACTIVE" --output-dir "$ARCHIVE/middle-third" --format json \
+            > "$ROOT/rotate-three.json"
+
+          set +e
+          python agent_audit_catalog.py verify "$CATALOG" \
+            --expected-catalog-id "$CATALOG_ONE" --active "$ACTIVE" --format json \
+            > "$ROOT/stale-verify.json" 2> "$ROOT/stale-verify.err"
+          STALE_STATUS=$?
+          set -e
+          test "$STALE_STATUS" -eq 1
+
+          python agent_audit_catalog.py sync "$CATALOG" \
+            --expected-catalog-id "$CATALOG_ONE" --active "$ACTIVE" --format json \
+            > "$ROOT/catalog-two.json"
+          CATALOG_TWO=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog-two.json")
+          python agent_audit_catalog.py verify "$CATALOG" \
+            --expected-catalog-id "$CATALOG_TWO" --active "$ACTIVE" --format json \
+            > "$ROOT/verify-two.json"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-catalog'
+          first = json.loads((root / 'catalog-one.json').read_text())
+          second = json.loads((root / 'catalog-two.json').read_text())
+          verified = json.loads((root / 'verify-two.json').read_text())
+          assert first['segment_count'] == 2
+          assert [item['directory'] for item in first['segments']] == ['z-oldest', 'a-newest']
+          assert second['updated'] is True
+          assert second['added_segments'] == 1
+          assert second['generation'] == 2
+          assert second['previous_catalog_id'] == first['catalog_id']
+          assert verified['catalog_id'] == second['catalog_id']
+          assert verified['segment_count'] == 3
+          assert verified['active']['privacy_safe'] is True
+          PY
+      - name: Preserve verified catalog evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-catalog-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-catalog/
+          if-no-files-found: error
+
+  catalog-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise catalog aliases outside source checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/catalog-venv"
+          BIN="$RUNNER_TEMP/catalog-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-catalog"
+          ARCHIVE="$ROOT/segments"
+          ACTIVE="$ROOT/active.jsonl"
+          CATALOG="$ARCHIVE/catalog.json"
+          mkdir -p "$ARCHIVE" "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/basit-agent" --audit-log "$ACTIVE" scan "$GITHUB_WORKSPACE" \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          "$BIN/basit-agent-segments" rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/0001" --format json > "$ROOT/rotate.json"
+          "$BIN/basit-agent-catalog" init "$CATALOG" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog.json"
+          CATALOG_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog.json")
+          "$BIN/agent-audit-catalog" verify "$CATALOG" \
+            --expected-catalog-id "$CATALOG_ID" --active "$ACTIVE" --format json \
+            > "$ROOT/verify.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'installed-catalog'
+          report = json.loads((root / 'verify.json').read_text())
+          assert report['valid'] is True
+          assert report['segment_count'] == 1
+          assert report['generation'] == 1
+          assert report['active']['privacy_safe'] is True
+          PY

@@ -9,7 +9,7 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 3. Preserve all working features and repository safety boundaries.
 4. Implement one coherent vertical slice rather than disconnected files.
 5. Add or update regression tests and documentation.
-6. Run unit tests, compilation, configuration validation, policy validation, baseline validation, Git scope validation, action validation, package validation, audit-integrity, typed-event-admission, and audit-segment validation, release-evidence validation, supply-chain evidence validation, release-admission validation, release-transition validation, release-trust-state validation, release-checkpoint validation, release-consistency validation, self-scan, and command-guard checks.
+6. Run unit tests, compilation, configuration validation, policy validation, baseline validation, Git scope validation, action validation, package validation, audit-integrity, typed-event-admission, audit-segment, and audit-catalog validation, release-evidence validation, supply-chain evidence validation, release-admission validation, release-transition validation, release-trust-state validation, release-checkpoint validation, release-consistency validation, self-scan, and command-guard checks.
 7. Commit only after verification succeeds.
 8. Update `development-progress.json` with the completed number, outcome, files, and verification evidence.
 9. Continue sequentially; do not skip or silently redo a number.
@@ -32,3 +32,4 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 - Task 14 introduced strict canonical audit-log records, complete-chain append preflight, stable `AUDxxx` diagnostics, external freshness pins, immutable verified-prefix recovery copies, and corrupt-log command blocking.
 - Task 15 introduced versioned typed audit-event admission, exact reserved-event schemas, bounded generic events, privacy-preserving path/command/Git-ref digests, typed coverage enforcement, and stable `AUD022`–`AUD024` diagnostics.
 - Task 16 introduced atomic audit segment rotation with canonical sealed manifests, exact archived bytes, typed active-log continuity records, complete ordered-chain verification, externally pinned latest segment IDs, and stable `AUS001`–`AUS008` diagnostics.
+- Task 17 introduced canonical audit segment catalogs with automatic sealed-directory discovery, exact catalog-to-segment binding, externally pinned catalog IDs, predecessor-linked generations, complete-coverage checks, and right-descendant-only synchronization under stable `AUC001`–`AUC010` diagnostics.

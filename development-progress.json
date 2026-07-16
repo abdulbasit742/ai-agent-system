@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 16,
-    "next_expected": 17
+    "latest_completed": 17,
+    "next_expected": 18
   },
   "completed": [
     {
@@ -118,6 +118,13 @@
       "status": "completed",
       "summary": "Added lock-coordinated rotation of fully typed audit logs into canonical sealed directories, atomic linked active-log replacement, complete archived-chain verification, and externally pinned latest-segment rollback protection.",
       "verification": {"unit_tests": 265, "python_versions": ["3.11", "3.12"], "compileall": "passed", "typed_source_preflight": "passed", "atomic_archive_and_active_replacement": "passed", "canonical_manifest_and_segment_digest": "passed", "two_segment_chain_and_active_continuity": "passed", "external_latest_segment_pin": "passed", "tamper_rehash_symlink_and_overwrite_rejection": "passed", "installed_segment_cli": "passed", "read_only_segment_ci": "passed", "twelve_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 17,
+      "title": "Canonical audit segment catalog",
+      "status": "completed",
+      "summary": "Added canonical catalogs that auto-discover sealed segment directories, bind exact archive evidence, require externally pinned catalog IDs, track predecessor-linked generations, detect incomplete histories, and synchronize only right-descendant segments.",
+      "verification": {"unit_tests": 284, "python_versions": ["3.11", "3.12"], "compileall": "passed", "unordered_segment_discovery": "passed", "canonical_catalog_id_and_predecessor_lineage": "passed", "exact_catalog_to_segment_binding": "passed", "complete_discovery_and_stale_catalog_detection": "passed", "pinned_right_descendant_sync": "passed", "fork_active_mismatch_and_stale_pin_rejection": "passed", "installed_catalog_cli": "passed", "read_only_catalog_ci": "passed", "thirteen_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }

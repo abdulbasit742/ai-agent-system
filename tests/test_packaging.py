@@ -71,10 +71,12 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertEqual(
             {
+                "agent-audit-catalog",
                 "agent-audit-segments",
                 "agent-changed-lines",
                 "agent-system",
                 "basit-agent",
+                "basit-agent-catalog",
                 "basit-agent-lines",
                 "basit-agent-segments",
             },
@@ -83,6 +85,7 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(
             {
                 "agent_audit",
+                "agent_audit_catalog",
                 "agent_audit_events",
                 "agent_audit_segments",
                 "agent_baseline",
