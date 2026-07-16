@@ -83,8 +83,11 @@ All notable public distribution changes are recorded here.
 - domain-separated receiver entry/state hashes binding handoff, trust checkpoint/state, authenticated head, admission decision, policy, and transition deltas
 - stable `ATR001` through `ATR010` diagnostics for unsafe paths, stale pins, policy denials, wrong roles, head mismatch, replay, rollback, ownership, and lock failures
 - lock-coordinated mode-0600 atomic receiver updates that preserve bytes on denied and invalid operations
-- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, and trust-receiver aliases, a reviewed twenty-four-module/twenty-eight-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable receiver-state Merkle checkpoints binding exact receiver state IDs, accepted-entry counts, current heads, and RFC 6962 roots
+- compact per-handoff receiver inclusion proofs with proof-only verification and optional complete handoff re-verification
+- stable `ARC001` through `ARC011` diagnostics with immutable outputs, external pins, checkpoint-substitution rejection, rollback, and fork lineage gates
+- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, trust-receiver, and receiver-checkpoint aliases, a reviewed twenty-five-module/thirty-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver/receiver-checkpoint, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
