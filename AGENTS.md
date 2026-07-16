@@ -18,12 +18,17 @@
 - Stale generated reports must be deleted before execution only after the output boundary validates.
 - Workflow annotations, job summaries, and generated SARIF must never contain scanner preview evidence.
 - Recommended pull-request workflows must remain read-only and must not use `pull_request_target` for untrusted code.
+- `agent_version.py` is the only package version source; do not duplicate a static version in `pyproject.toml` or CLI wrappers.
+- The public wheel must remain runtime-dependency-free and contain only the reviewed eight-module allowlist.
+- Tests, docs, action internals, integration locks, external repositories, environment files, baselines, reports, and audit logs must never enter the wheel.
+- Installed-wheel `doctor` and integration `run` commands must fail closed rather than silently vendoring or changing pinned integrations.
+- Ordinary CI may build and validate artifacts but must never publish a package or read registry credentials.
 
 Verification:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
@@ -31,5 +36,9 @@ python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --ba
 python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
 python -m unittest discover -s tests -p "test_github_action.py" -v
 python -m unittest discover -s tests -p "test_action_entrypoint.py" -v
+python -m unittest discover -s tests -p "test_packaging.py" -v
+python -m unittest discover -s tests -p "test_wheel_validator.py" -v
+python -m pip wheel . --no-deps --wheel-dir dist
+python scripts/validate_wheel.py dist/*.whl
 python agent_system.py scan . --format json --fail-on high
 ```

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "basit-agent-system"
+dynamic = ["version"]
+description = "Dependency-free AI agent security control plane with baselines, Git scopes, SARIF, and safe command gates."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Abdul Basit" }]
+keywords = ["ai-agents", "security", "sarif", "git", "ci", "policy"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Security",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/abdulbasit742/ai-agent-system"
+Repository = "https://github.com/abdulbasit742/ai-agent-system"
+Issues = "https://github.com/abdulbasit742/ai-agent-system/issues"
+
+[project.scripts]
+basit-agent = "agent_cli:main"
+basit-agent-lines = "agent_cli:changed_lines_main"
+agent-system = "agent_cli:main"
+agent-changed-lines = "agent_cli:changed_lines_main"
+
+[tool.setuptools]
+include-package-data = false
+py-modules = [
+  "agent_baseline",
+  "agent_changed_lines",
+  "agent_cli",
+  "agent_config",
+  "agent_git",
+  "agent_policy",
+  "agent_system",
+  "agent_version",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "agent_version.__version__" }
