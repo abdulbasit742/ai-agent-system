@@ -37,7 +37,12 @@ All notable public distribution changes are recorded here.
 - domain-separated SHA-256 references for paths, command arrays, and Git refs without retaining raw values
 - typed/untyped coverage, event counts, privacy-state reporting, and optional typed-only migration enforcement
 - stable `AUD022`, `AUD023`, and `AUD024` event-admission diagnostics
-- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, audit-integrity, and event-admission artifacts with no publication, signing key, OIDC request, or registry credentials
+- atomic audit segment rotation into new no-overwrite directories with exact sealed JSON Lines bytes and canonical manifests
+- typed archived-to-active continuity records binding segment IDs, content digests, audit heads, counts, and sizes
+- complete ordered segment-chain verification with independently retained latest-segment rollback pins
+- stable `AUS001` through `AUS008` diagnostics for unsafe paths, invalid sources, manifest drift, content tamper, continuity failures, stale pins, and empty rotation sources
+- two installed segment commands, a reviewed twelve-module wheel, and synchronized release-admission module/script boundaries
+- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, audit-integrity, event-admission, and segment artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
