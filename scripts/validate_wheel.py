@@ -21,6 +21,7 @@ EXPECTED_NAME = "basit-agent-system"
 EXPECTED_VERSION = __version__
 EXPECTED_MODULES = {
     "agent_audit.py",
+    "agent_audit_bundle.py",
     "agent_audit_catalog.py",
     "agent_audit_checkpoint.py",
     "agent_audit_consistency.py",
@@ -37,6 +38,7 @@ EXPECTED_MODULES = {
     "agent_version.py",
 }
 EXPECTED_SCRIPTS = {
+    "agent-audit-bundle": "agent_audit_bundle:main",
     "agent-audit-catalog": "agent_audit_catalog:main",
     "agent-audit-catalog-checkpoint": "agent_audit_checkpoint:main",
     "agent-audit-catalog-consistency": "agent_audit_consistency:main",
@@ -44,6 +46,7 @@ EXPECTED_SCRIPTS = {
     "agent-changed-lines": "agent_cli:changed_lines_main",
     "agent-system": "agent_cli:main",
     "basit-agent": "agent_cli:main",
+    "basit-agent-audit-bundle": "agent_audit_bundle:main",
     "basit-agent-catalog": "agent_audit_catalog:main",
     "basit-agent-catalog-checkpoint": "agent_audit_checkpoint:main",
     "basit-agent-catalog-consistency": "agent_audit_consistency:main",
