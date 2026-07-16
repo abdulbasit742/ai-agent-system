@@ -1,0 +1,303 @@
+import copy
+import unittest
+
+from agent_audit_trust_receiver_acceptance_trust import (
+    AuditTrustReceiverAcceptanceTrustError,
+    adapter_report,
+    append_transition,
+    create_state,
+    validate_state,
+)
+
+
+def h(value: int) -> str:
+    return f"{value:064x}"
+
+
+def candidate(
+    base: int,
+    acceptance_entries: int,
+    receiver_entries: int,
+    trust_entries: int,
+    generation: int,
+    segments: int,
+):
+    return {
+        "checkpoint_id": h(base + 1),
+        "state_id": h(base + 2),
+        "entry_count": acceptance_entries,
+        "head": {
+            "sequence": acceptance_entries,
+            "entry_hash": h(base + 3),
+            "handoff_bundle_id": h(base + 4),
+            "checkpoint_id": h(base + 5),
+            "state_id": h(base + 6),
+            "entry_count": receiver_entries,
+            "head_bundle_id": h(base + 7),
+            "generation": generation,
+            "segment_count": segments,
+            "trust_checkpoint_id": h(base + 8),
+            "trust_state_id": h(base + 9),
+            "trust_entry_count": trust_entries,
+        },
+        "merkle_root": h(base + 10),
+    }
+
+
+def verified_snapshot():
+    item = candidate(100, 1, 1, 1, 1, 1)
+    return {
+        "valid": True,
+        "bundle_id": h(90),
+        "bundle_type": "snapshot",
+        "candidate": item,
+        "previous": None,
+        "consistency": None,
+        "files": 4,
+        "bytes": 1000,
+        "proof_count": 1,
+        "head_handoff_bundle_id": item["head"]["handoff_bundle_id"],
+    }
+
+
+def verified_transition(previous=None):
+    previous = copy.deepcopy(previous or verified_snapshot()["candidate"])
+    item = candidate(200, 2, 2, 2, 2, 2)
+    return {
+        "valid": True,
+        "bundle_id": h(190),
+        "bundle_type": "transition",
+        "candidate": item,
+        "previous": previous,
+        "consistency": {"relation": "right-descendant", "consistency_id": h(299)},
+        "files": 7,
+        "bytes": 2000,
+        "proof_count": 1,
+        "head_handoff_bundle_id": item["head"]["handoff_bundle_id"],
+    }
+
+
+def report(verified, admitted=True):
+    candidate_item = verified["candidate"]
+    previous = verified.get("previous")
+    head = candidate_item["head"]
+    previous_head = previous["head"] if isinstance(previous, dict) else None
+    return {
+        "admitted": admitted,
+        "policy_sha256": h(800),
+        "identity": {
+            "bundle_id": verified["bundle_id"],
+            "bundle_type": verified["bundle_type"],
+            "candidate_acceptance_checkpoint_id": candidate_item["checkpoint_id"],
+            "candidate_acceptance_state_id": candidate_item["state_id"],
+            "previous_acceptance_checkpoint_id": previous["checkpoint_id"] if previous else None,
+            "previous_acceptance_state_id": previous["state_id"] if previous else None,
+        },
+        "evidence": {
+            "files": verified["files"],
+            "bytes": verified["bytes"],
+            "proof_count": verified["proof_count"],
+            "selected_sequences": [candidate_item["entry_count"]],
+            "selected_receiver_bundle_ids": [head["handoff_bundle_id"]],
+            "candidate_acceptance_entries": candidate_item["entry_count"],
+            "candidate_receiver_entries": head["entry_count"],
+            "candidate_trust_entries": head["trust_entry_count"],
+            "candidate_generation": head["generation"],
+            "candidate_segment_count": head["segment_count"],
+            "head_receiver_bundle_id": head["handoff_bundle_id"],
+            "head_trust_handoff_id": head["head_bundle_id"],
+            "acceptance_entry_delta": (
+                candidate_item["entry_count"] - previous["entry_count"] if previous else None
+            ),
+            "receiver_entry_delta": (
+                head["entry_count"] - previous_head["entry_count"] if previous_head else None
+            ),
+            "trust_entry_delta": (
+                head["trust_entry_count"] - previous_head["trust_entry_count"]
+                if previous_head else None
+            ),
+            "generation_delta": (
+                head["generation"] - previous_head["generation"] if previous_head else None
+            ),
+            "segment_delta": (
+                head["segment_count"] - previous_head["segment_count"] if previous_head else None
+            ),
+        },
+        "violations": [] if admitted else [{"rule_id": "ABA001", "message": "denied"}],
+        "decision_id": h(801 if admitted else 802),
+    }
+
+
+class ReceiverAcceptanceTrustTests(unittest.TestCase):
+    def anchor(self):
+        verified = verified_snapshot()
+        return create_state(report(verified), verified)
+
+    def transition(self, state=None, verified=None):
+        state = state or self.anchor()
+        verified = verified or verified_transition()
+        return append_transition(state, report(verified), verified)
+
+    def test_adapter_contract_is_isolated(self):
+        contract = adapter_report()
+        self.assertTrue(contract["valid"])
+        self.assertEqual("ABT", contract["rule_prefix"])
+        self.assertEqual("agent_audit_trust_receiver_acceptance.py", contract["source"])
+        self.assertIn("receiver_entry_count", contract["evidence_fields"])
+        self.assertNotIn("trust_entry_count", contract["evidence_fields"])
+
+    def test_anchor_round_trip(self):
+        state = self.anchor()
+        self.assertEqual(state, validate_state(state))
+        self.assertEqual(1, state["head"]["entry_count"])
+
+    def test_transition_round_trip(self):
+        state = self.transition()
+        self.assertEqual(state, validate_state(state))
+        self.assertEqual(2, len(state["entries"]))
+        self.assertEqual(2, state["head"]["receiver_entry_count"])
+
+    def test_anchor_requires_snapshot(self):
+        verified = verified_transition()
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            create_state(report(verified), verified)
+
+    def test_anchor_requires_admission(self):
+        verified = verified_snapshot()
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            create_state(report(verified, admitted=False), verified)
+
+    def test_transition_requires_admission(self):
+        verified = verified_transition()
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified, admitted=False), verified)
+
+    def test_previous_acceptance_head_must_match(self):
+        verified = verified_transition()
+        verified["previous"]["state_id"] = h(999)
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified), verified)
+
+    def test_previous_receiver_head_must_match(self):
+        verified = verified_transition()
+        verified["previous"]["head"]["state_id"] = h(999)
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified), verified)
+
+    def test_acceptance_entry_count_must_advance(self):
+        verified = verified_transition()
+        verified["candidate"]["entry_count"] = 1
+        verified["candidate"]["head"]["sequence"] = 1
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified), verified)
+
+    def test_receiver_entry_count_must_advance(self):
+        verified = verified_transition()
+        verified["candidate"]["head"]["entry_count"] = 1
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified), verified)
+
+    def test_generation_must_advance(self):
+        verified = verified_transition()
+        verified["candidate"]["head"]["generation"] = 1
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified), verified)
+
+    def test_segment_count_must_not_decrease(self):
+        verified = verified_transition()
+        verified["candidate"]["head"]["segment_count"] = 0
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), report(verified), verified)
+
+    def test_duplicate_identities_are_rejected(self):
+        state = self.anchor()
+        for field, value in (
+            ("bundle_id", state["head"]["handoff_bundle_id"]),
+            ("checkpoint_id", state["head"]["checkpoint_id"]),
+            ("state_id", state["head"]["state_id"]),
+        ):
+            with self.subTest(field=field):
+                verified = verified_transition()
+                if field == "bundle_id":
+                    verified[field] = value
+                else:
+                    verified["candidate"][field] = value
+                with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+                    append_transition(state, report(verified), verified)
+
+    def test_entry_hash_tamper_is_rejected(self):
+        state = self.anchor()
+        state["entries"][0]["entry_hash"] = h(999)
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            validate_state(state)
+
+    def test_state_id_tamper_is_rejected(self):
+        state = self.anchor()
+        state["state_id"] = h(999)
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            validate_state(state)
+
+    def test_acceptance_delta_must_match(self):
+        verified = verified_transition()
+        item = report(verified)
+        item["evidence"]["acceptance_entry_delta"] = 2
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), item, verified)
+
+    def test_receiver_delta_must_match(self):
+        verified = verified_transition()
+        item = report(verified)
+        item["evidence"]["receiver_entry_delta"] = 2
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            append_transition(self.anchor(), item, verified)
+
+    def test_report_identity_must_match(self):
+        verified = verified_snapshot()
+        item = report(verified)
+        item["identity"]["bundle_id"] = h(999)
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            create_state(item, verified)
+
+    def test_report_evidence_must_match(self):
+        verified = verified_snapshot()
+        item = report(verified)
+        item["evidence"]["candidate_generation"] = 2
+        with self.assertRaises(AuditTrustReceiverAcceptanceTrustError):
+            create_state(item, verified)
+
+    def test_state_domains_differ_from_source_acceptance_state(self):
+        from agent_audit_trust_receiver_acceptance import create_state as source_create
+
+        verified = verified_snapshot()
+        source_report = {
+            **report(verified),
+            "identity": {
+                "bundle_id": verified["bundle_id"],
+                "bundle_type": "snapshot",
+                "candidate_receiver_checkpoint_id": verified["candidate"]["checkpoint_id"],
+                "candidate_receiver_state_id": verified["candidate"]["state_id"],
+                "previous_receiver_checkpoint_id": None,
+                "previous_receiver_state_id": None,
+            },
+            "evidence": {
+                "files": verified["files"],
+                "bytes": verified["bytes"],
+                "proof_count": verified["proof_count"],
+                "selected_sequences": [verified["candidate"]["entry_count"]],
+                "selected_handoff_ids": [verified["candidate"]["head"]["handoff_bundle_id"]],
+                "candidate_receiver_entries": verified["candidate"]["entry_count"],
+                "candidate_trust_entries": verified["candidate"]["head"]["entry_count"],
+                "candidate_generation": verified["candidate"]["head"]["generation"],
+                "candidate_segment_count": verified["candidate"]["head"]["segment_count"],
+                "head_handoff_bundle_id": verified["head_handoff_bundle_id"],
+                "receiver_entry_delta": None,
+                "trust_entry_delta": None,
+                "generation_delta": None,
+            },
+        }
+        source_state = source_create(source_report, verified)
+        self.assertNotEqual(self.anchor()["state_id"], source_state["state_id"])
+
+
+if __name__ == "__main__":
+    unittest.main()
