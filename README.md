@@ -6,6 +6,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 
 - repository, MCP, workflow, prompt, secret, and autonomy-boundary scanning
 - configurable rule packs with mandatory core protections
+- exact-fingerprint baselines and new-findings-only CI gates
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -28,6 +29,27 @@ The root CLI works without downloading integrations. Optional pinned integration
 ```bash
 python scripts/bootstrap_integrations.py
 ```
+
+## Baseline adoption for existing repositories
+
+Review current findings and create an exact-fingerprint baseline:
+
+```bash
+python agent_system.py scan . --format json
+python agent_system.py baseline --create --scan-path .
+```
+
+Then fail CI only when a new finding is introduced:
+
+```bash
+python agent_system.py scan . --new-only --format json --fail-on high
+```
+
+The scanner automatically discovers `.agent-system-baseline.json`. Use `--show-existing` to include existing and resolved entries in JSON or text reports. SARIF baseline mode contains only new findings.
+
+Baselines contain no secret previews or source evidence. They carry an integrity hash and are bound to the active rule-pack and suppression controls. Changed controls, malformed files, or manual edits fail closed.
+
+See [docs/baseline-gating.md](docs/baseline-gating.md).
 
 ## Rule-pack configuration
 
@@ -112,9 +134,11 @@ Development is tracked as an ordered 1-to-400 sequence. Every number must preser
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py agent_policy.py agent_config.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
+python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
+python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```

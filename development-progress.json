@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 1,
-    "next_expected": 2
+    "latest_completed": 2,
+    "next_expected": 3
   },
   "completed": [
     {
@@ -16,6 +16,22 @@
         "unit_tests": 21,
         "compileall": "passed",
         "config_validation": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 2,
+      "title": "Exact-fingerprint baseline gate",
+      "status": "completed",
+      "summary": "Added integrity-checked, control-bound baselines and a new-findings-only CI mode for safe adoption in repositories with legacy findings.",
+      "verification": {
+        "unit_tests": 32,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "baseline_creation": "passed",
+        "new_only_existing_findings": "passed",
+        "new_high_regression_gate": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

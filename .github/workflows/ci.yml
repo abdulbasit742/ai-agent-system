@@ -17,9 +17,26 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m unittest discover -s tests -v
-      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py tests scripts
+      - name: Test scanner and CLI
+        run: python -m unittest discover -s tests -p "test_agent_system.py" -v
+      - name: Test suppression policies
+        run: python -m unittest discover -s tests -p "test_agent_policy.py" -v
+      - name: Test rule-pack configuration
+        run: python -m unittest discover -s tests -p "test_agent_config.py" -v
+      - name: Test baseline model
+        run: python -m unittest discover -s tests -p "test_agent_baseline.py" -v
+      - name: Test baseline CLI existing finding
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k existing_high -v
+      - name: Test baseline CLI new regression
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k new_high -v
+      - name: Test baseline CLI scope mismatch
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k changed_rule_scope -v
+      - name: Test baseline CLI overwrite protection
+        run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k refuses_overwrite -v
+      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
+      - run: python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
+      - run: python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
       - run: python agent_system.py scan . --format json --fail-on high
       - run: python agent_system.py guard python -m unittest discover -s tests
