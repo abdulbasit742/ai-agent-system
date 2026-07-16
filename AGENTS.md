@@ -1,7 +1,7 @@
 # Repository Agent Guidance
 
 - Keep the root control plane dependency-free, local-first, and dry-run-first.
-- Never commit secrets, populated `.env` files, private data, generated reports, audit logs, segment archives, segment catalogs, catalog checkpoints, catalog inclusion proofs, catalog consistency proofs, or audit evidence bundles.
+- Never commit secrets, populated `.env` files, private data, generated reports, audit logs, segment archives, segment catalogs, catalog checkpoints, catalog inclusion proofs, catalog consistency proofs, audit evidence bundles, generated admission policies, or admission decisions.
 - Do not copy, fetch, vendor, or include `Dicklesworthstone/destructive_command_guard`; its current license restricts OpenAI and related parties.
 - Preserve licenses and reviewed commits in `integrations.lock.json`.
 - Add stable rule IDs and regression tests for scanner or command-guard changes.
@@ -19,8 +19,8 @@
 - Workflow annotations, job summaries, and generated SARIF must never contain scanner preview evidence.
 - Recommended pull-request workflows must remain read-only and must not use `pull_request_target` for untrusted code.
 - `agent_version.py` is the only package version source; do not duplicate a static version in `pyproject.toml`, validators, or CLI wrappers.
-- The public wheel must remain runtime-dependency-free and contain only the reviewed sixteen-module allowlist.
-- Tests, docs, action internals, integration locks, external repositories, environment files, baselines, reports, audit-log data, segment archives, segment catalogs, catalog checkpoints, catalog proofs, catalog consistency proofs, and audit evidence bundles must never enter the wheel.
+- The public wheel must remain runtime-dependency-free and contain only the reviewed seventeen-module allowlist.
+- Tests, docs, action internals, integration locks, external repositories, environment files, baselines, reports, audit-log data, segment archives, segment catalogs, catalog checkpoints, catalog proofs, catalog consistency proofs, audit evidence bundles, admission policies, and admission decisions must never enter the wheel.
 - Installed-wheel `doctor` and integration `run` commands must fail closed rather than silently vendoring or changing pinned integrations.
 - Audit logs must use strict UTF-8 canonical JSON Lines, exact legacy/versioned schemas, UTC timestamps, printable events, object details, lowercase SHA-256 links, and versioned physical-line sequences.
 - Every audit append must hold the sidecar advisory lock and verify the complete existing chain before deriving the next sequence and previous hash. Invalid chains must never be extended.
@@ -59,6 +59,12 @@
 - Bundles must be new immutable directories published only after complete staging verification. Never overwrite an existing output, infer missing proofs, merge forks, or use a compressed archive that introduces extraction-path risk.
 - Selected sealed segments may be copied only after proof-to-directory verification. Proof-only bundles may omit segment bytes and remain independently verifiable from the pinned checkpoint.
 - Audit evidence bundles are unsigned integrity and portability containers. They do not authenticate the producer, establish witness consensus, or replace external freshness pins.
+- Audit bundle admission policies are consumer-owned inputs and must never be loaded from inside the bundle being evaluated.
+- Audit bundle admission must verify the complete bundle and exact external bundle/checkpoint pins before applying authorization policy. Invalid evidence is not an ordinary policy denial.
+- Admission policies must use exact versioned schemas, strict types, canonical hashing, bounded counts, sorted unique allowlists, and stable `AUA001` through `AUA016` controls.
+- Admission reports may contain hashes, counts, generations, selected segment identities, policy hashes, decision IDs, and stable diagnostics, but never audit contents, source files, credentials, raw paths, commands, or environment secrets.
+- Audit bundle admission must distinguish admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) outcomes.
+- Policy hashes and decision IDs are unsigned integrity commitments, not authenticated consumer identities, signatures, witness consensus, or non-repudiation.
 - Release bundles must use exact commit SHAs and `SOURCE_DATE_EPOCH`; never include wall-clock build time, runner identity, or mutable branch names.
 - Release output directories must be new or empty. Never delete or overwrite existing release content.
 - Release verification must check the exact file boundary, canonical manifest integrity, wheel metadata, evidence metadata, sizes, SHA-256 checksums, and byte-for-byte reproducibility.
@@ -88,13 +94,13 @@
 - Consistency-proof creation may accept only identical or right-descendant histories. Rollback and fork requests must retain stable `CNS010` and `CNS011` denials and must not create proof files.
 - Previous and candidate checkpoint IDs must be externally pinned for consistency verification; proof files do not authenticate checkpoint producers.
 - Consistency proof outputs must remain immutable, canonical, symlink-safe, atomic no-overwrite files and must exclude trust entries, source contents, credentials, and transition-policy details.
-- Ordinary CI may build, verify, admit, compare, exercise temporary audit logs, typed-event gates, segment rotations, segment catalogs, catalog checkpoints, catalog inclusion and consistency proofs, portable audit evidence bundles, trust states, release checkpoints, and release consistency proofs, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Ordinary CI may build, verify, admit, compare, exercise temporary audit logs, typed-event gates, segment rotations, segment catalogs, catalog checkpoints, catalog inclusion and consistency proofs, portable audit evidence bundles, audit bundle admission policies, trust states, release checkpoints, and release consistency proofs, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_audit_bundle.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_audit_bundle.py agent_audit_admission.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py audit-events --format json
@@ -110,6 +116,7 @@ python -m unittest discover -s tests -p "test_audit_catalog.py" -v
 python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
 python -m unittest discover -s tests -p "test_audit_catalog_consistency.py" -v
 python -m unittest discover -s tests -p "test_audit_evidence_bundle.py" -v
+python -m unittest discover -s tests -p "test_audit_bundle_admission.py" -v
 python -m unittest discover -s tests -p "test_github_action.py" -v
 python -m unittest discover -s tests -p "test_action_entrypoint.py" -v
 python -m unittest discover -s tests -p "test_packaging.py" -v
