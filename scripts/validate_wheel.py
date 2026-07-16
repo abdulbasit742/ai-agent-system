@@ -28,6 +28,7 @@ EXPECTED_MODULES = {
     "agent_audit_consistency.py",
     "agent_audit_events.py",
     "agent_audit_segments.py",
+    "agent_audit_trust.py",
     "agent_baseline.py",
     "agent_changed_lines.py",
     "agent_cli.py",
@@ -45,11 +46,13 @@ EXPECTED_SCRIPTS = {
     "agent-audit-catalog-checkpoint": "agent_audit_checkpoint:main",
     "agent-audit-catalog-consistency": "agent_audit_consistency:main",
     "agent-audit-segments": "agent_audit_segments:main",
+    "agent-audit-trust": "agent_audit_trust:main",
     "agent-changed-lines": "agent_cli:changed_lines_main",
     "agent-system": "agent_cli:main",
     "basit-agent": "agent_cli:main",
     "basit-agent-audit-admission": "agent_audit_admission:main",
     "basit-agent-audit-bundle": "agent_audit_bundle:main",
+    "basit-agent-audit-trust": "agent_audit_trust:main",
     "basit-agent-catalog": "agent_audit_catalog:main",
     "basit-agent-catalog-checkpoint": "agent_audit_checkpoint:main",
     "basit-agent-catalog-consistency": "agent_audit_consistency:main",
@@ -79,9 +82,7 @@ def _dist_info(names: set[str]) -> str:
         if ".dist-info/" in name and "/" in name
     }
     if len(directories) != 1:
-        raise WheelValidationError(
-            "wheel must contain exactly one .dist-info directory"
-        )
+        raise WheelValidationError("wheel must contain exactly one .dist-info directory")
     return next(iter(directories))
 
 
@@ -113,14 +114,9 @@ def validate_wheel(path: Path) -> dict[str, Any]:
 
     with archive:
         names = set(archive.namelist())
-        if any(
-            name.startswith("/") or ".." in Path(name).parts
-            for name in names
-        ):
+        if any(name.startswith("/") or ".." in Path(name).parts for name in names):
             raise WheelValidationError("wheel contains an unsafe archive path")
-        root_python = {
-            name for name in names if "/" not in name and name.endswith(".py")
-        }
+        root_python = {name for name in names if "/" not in name and name.endswith(".py")}
         if root_python != EXPECTED_MODULES:
             missing = sorted(EXPECTED_MODULES - root_python)
             unexpected = sorted(root_python - EXPECTED_MODULES)
@@ -128,23 +124,17 @@ def validate_wheel(path: Path) -> dict[str, Any]:
                 f"wheel module boundary mismatch; missing={missing}, unexpected={unexpected}"
             )
         forbidden = sorted(
-            name
-            for name in names
+            name for name in names
             if any(fragment in name.lower() for fragment in FORBIDDEN_FRAGMENTS)
         )
         if forbidden:
-            raise WheelValidationError(
-                f"wheel contains forbidden files: {forbidden}"
-            )
+            raise WheelValidationError(f"wheel contains forbidden files: {forbidden}")
         unexpected_source = sorted(
-            name
-            for name in names
+            name for name in names
             if name.endswith(".py") and name not in EXPECTED_MODULES
         )
         if unexpected_source:
-            raise WheelValidationError(
-                f"wheel contains unexpected Python source: {unexpected_source}"
-            )
+            raise WheelValidationError(f"wheel contains unexpected Python source: {unexpected_source}")
 
         dist_info = _dist_info(names)
         required = {
@@ -155,27 +145,17 @@ def validate_wheel(path: Path) -> dict[str, Any]:
         }
         missing_metadata = sorted(required - names)
         if missing_metadata:
-            raise WheelValidationError(
-                f"wheel metadata is incomplete: {missing_metadata}"
-            )
+            raise WheelValidationError(f"wheel metadata is incomplete: {missing_metadata}")
 
-        metadata = Parser().parsestr(
-            archive.read(f"{dist_info}/METADATA").decode("utf-8")
-        )
+        metadata = Parser().parsestr(archive.read(f"{dist_info}/METADATA").decode("utf-8"))
         if metadata.get("Name", "").lower().replace("_", "-") != EXPECTED_NAME:
-            raise WheelValidationError(
-                "wheel project name does not match the reviewed name"
-            )
+            raise WheelValidationError("wheel project name does not match the reviewed name")
         if metadata.get("Version") != EXPECTED_VERSION:
-            raise WheelValidationError(
-                "wheel version does not match agent_version.py"
-            )
+            raise WheelValidationError("wheel version does not match agent_version.py")
         if metadata.get("Requires-Python") != ">=3.11":
             raise WheelValidationError("wheel Requires-Python must be >=3.11")
         if metadata.get_all("Requires-Dist"):
-            raise WheelValidationError(
-                "wheel must not declare runtime dependencies"
-            )
+            raise WheelValidationError("wheel must not declare runtime dependencies")
 
         scripts = _entry_points(
             archive.read(f"{dist_info}/entry_points.txt").decode("utf-8")
@@ -191,9 +171,7 @@ def validate_wheel(path: Path) -> dict[str, Any]:
             if len(fields) >= 2 and fields[1].startswith("sha256="):
                 digest = fields[1].removeprefix("sha256=")
                 if not digest:
-                    raise WheelValidationError(
-                        "wheel RECORD contains an empty digest"
-                    )
+                    raise WheelValidationError("wheel RECORD contains an empty digest")
 
     return {
         "wheel": str(path),
