@@ -5,6 +5,9 @@ venv/
 node_modules/
 dist/
 build/
+release/
+dist-one/
+dist-two/
 .env
 .env.*
 !.env.example
