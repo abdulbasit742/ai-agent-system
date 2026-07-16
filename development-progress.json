@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "sequence": {
+    "start": 1,
+    "end": 400,
+    "latest_completed": 1,
+    "next_expected": 2
+  },
+  "completed": [
+    {
+      "number": 1,
+      "title": "Configurable scanner rule packs",
+      "status": "completed",
+      "summary": "Added validated project-specific rule-pack configuration while keeping core credential and secret protections mandatory.",
+      "verification": {
+        "unit_tests": 21,
+        "compileall": "passed",
+        "config_validation": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    }
+  ]
+}
