@@ -1,6 +1,6 @@
 # Security audit: Python distribution
 
-Task 6 introduced the installable wheel and console scripts. Task 14 expands the reviewed runtime boundary for strict audit handling while keeping the package dependency-free.
+Task 6 introduced the installable wheel and console scripts. Tasks 14 and 15 expand the reviewed runtime boundary for strict audit integrity and typed event admission while keeping the package dependency-free.
 
 ## Dependency boundary
 
@@ -18,9 +18,10 @@ Task 6 introduced the installable wheel and console scripts. Task 14 expands the
 
 ## Wheel contents
 
-`scripts/validate_wheel.py` enforces an exact ten-module allowlist:
+`scripts/validate_wheel.py` enforces an exact eleven-module allowlist:
 
 - `agent_audit.py`
+- `agent_audit_events.py`
 - `agent_baseline.py`
 - `agent_changed_lines.py`
 - `agent_cli.py`
@@ -31,7 +32,7 @@ Task 6 introduced the installable wheel and console scripts. Task 14 expands the
 - `agent_system_legacy.py`
 - `agent_version.py`
 
-The small `agent_system.py` wrapper adds strict audit preflight while `agent_system_legacy.py` retains the previously reviewed control-plane implementation unchanged. This compatibility split prevents unrelated scanner, baseline, policy, Git-scope, guard, and dispatcher behavior from being rewritten during the audit hardening task.
+`agent_audit.py` verifies and appends canonical hash-chain records. `agent_audit_events.py` performs typed event admission and privacy normalization. The small `agent_system.py` wrapper combines those controls while `agent_system_legacy.py` retains the previously reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
 
 The validator rejects:
 
@@ -49,7 +50,7 @@ The installed wheel does not contain `integrations.lock.json` or cloned external
 
 ## Audit-data boundary
 
-Audit runtime code is included, but audit JSON Lines files, lock files, recovery copies, reports, and CI evidence are not package source. The archive validator continues to reject generated audit data while allowing the reviewed `agent_audit.py` module.
+Audit runtime code is included, but audit JSON Lines files, lock files, recovery copies, reports, and CI evidence are not package source. Raw paths, command arrays, and Git refs are normalized to domain-separated references before new audit records are stored.
 
 ## Release boundary
 
@@ -57,4 +58,4 @@ Ordinary pull-request and push CI builds and validates the wheel but does not pu
 
 ## Installation verification
 
-CI builds a wheel on Python 3.11 and 3.12, validates the archive, installs it into an isolated virtual environment without dependencies, checks all console aliases, performs a repository self-scan from outside the source directory, and verifies that installed audit commands can write and inspect a strict local chain.
+CI builds a wheel on Python 3.11 and 3.12, validates the archive, installs it into an isolated virtual environment without dependencies, checks all console aliases, performs a repository self-scan from outside the source directory, and verifies that installed audit commands create a fully typed privacy-safe chain.
