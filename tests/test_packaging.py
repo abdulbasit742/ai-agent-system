@@ -81,6 +81,7 @@ class PackagingTests(unittest.TestCase):
             "agent-audit-trust-receiver-admission",
             "agent-audit-trust-receiver-acceptance",
             "agent-audit-trust-receiver-acceptance-checkpoint",
+            "agent-audit-trust-receiver-acceptance-consistency",
             "agent-changed-lines", "agent-system", "basit-agent",
             "basit-agent-audit-admission", "basit-agent-audit-bundle",
             "basit-agent-audit-trust", "basit-agent-audit-trust-checkpoint",
@@ -92,6 +93,7 @@ class PackagingTests(unittest.TestCase):
             "basit-agent-audit-trust-receiver-admission",
             "basit-agent-audit-trust-receiver-acceptance",
             "basit-agent-audit-trust-receiver-acceptance-checkpoint",
+            "basit-agent-audit-trust-receiver-acceptance-consistency",
             "basit-agent-catalog", "basit-agent-catalog-checkpoint",
             "basit-agent-catalog-consistency", "basit-agent-lines", "basit-agent-segments",
         }
@@ -109,6 +111,7 @@ class PackagingTests(unittest.TestCase):
             "agent_audit_trust_receiver_admission",
             "agent_audit_trust_receiver_acceptance",
             "agent_audit_trust_receiver_acceptance_checkpoint",
+            "agent_audit_trust_receiver_acceptance_consistency",
             "agent_baseline", "agent_changed_lines", "agent_cli", "agent_config",
             "agent_git", "agent_policy", "agent_system", "agent_system_legacy",
             "agent_version",
