@@ -34,7 +34,7 @@ jobs:
           python -m unittest discover -s tests -p "test_audit_trust_checkpoint.py" -v
           python -m unittest discover -s tests -p "test_audit_trust_consistency.py" -v
       - name: Compile runtime
-        run: python -m compileall -q agent_audit_trust_bundle.py agent_audit_trust_bundle_core.py tests/test_audit_trust_bundle.py tests/test_audit_trust_bundle_cases.py
+        run: python -m compileall -q agent_audit_trust_bundle.py agent_audit_trust_bundle_core.py tests/test_audit_trust_bundle.py tests/audit_trust_bundle_cases.py
       - name: Preserve test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
