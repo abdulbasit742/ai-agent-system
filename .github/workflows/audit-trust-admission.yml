@@ -1,0 +1,93 @@
+name: audit-trust-admission
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  trust-admission-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test trust handoff admission
+        run: python -m unittest discover -s tests -p "test_audit_trust_admission.py" -v
+      - name: Re-run trust handoff regressions
+        run: python -m unittest discover -s tests -p "test_audit_trust_bundle.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_admission.py tests/test_audit_trust_admission.py
+
+  trust-admission-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Evaluate admitted and denied handoffs
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-admission"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          import audit_trust_bundle_cases as cases
+          from agent_audit_trust import canonical_json
+          from agent_audit_trust_admission import default_policy
+          from test_audit_trust_consistency import anchor
+
+          cases.write_json = lambda path, payload: path.write_bytes(canonical_json(payload))
+          root = Path(os.environ["ROOT"])
+          inputs = cases.make_inputs(root / "input", anchor())
+          manifest = cases.create_from_inputs(root / "input", inputs)
+          (root / "policy.json").write_bytes(canonical_json(default_policy()))
+          denied = default_policy()
+          denied["bundle"]["allowed_types"] = ["transition"]
+          (root / "denied-policy.json").write_bytes(canonical_json(denied))
+          (root / "pins.json").write_text(json.dumps({
+              "bundle": manifest["bundle_id"],
+              "candidate": inputs["candidate"]["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          BUNDLE=$(pin bundle)
+          CANDIDATE=$(pin candidate)
+          python agent_audit_trust_admission.py evaluate "$ROOT/input/bundle" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$BUNDLE" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --format json > "$ROOT/admitted.json"
+          set +e
+          python agent_audit_trust_admission.py evaluate "$ROOT/input/bundle" \
+            --policy "$ROOT/denied-policy.json" \
+            --expected-bundle-id "$BUNDLE" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --format json > "$ROOT/denied.json"
+          STATUS=$?
+          set -e
+          test "$STATUS" -eq 1
+          python - <<'PY' "$ROOT/admitted.json" "$ROOT/denied.json"
+          import json, sys
+          admitted = json.load(open(sys.argv[1]))
+          denied = json.load(open(sys.argv[2]))
+          assert admitted["admitted"] is True
+          assert denied["admitted"] is False
+          assert denied["violations"][0]["rule_id"] == "ATA001"
+          PY
+      - name: Preserve admission evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-admission-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-admission/
+          if-no-files-found: error
