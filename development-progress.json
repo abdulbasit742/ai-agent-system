@@ -37,10 +37,11 @@
       "status": "completed",
       "summary": "Added a consumer-owned canonical trust state that anchors admitted receiver-acceptance snapshot bundles and atomically advances through admitted transitions with exact acceptance and nested receiver continuity, replay protection, and external freshness pins.",
       "verification": {
-        "unit_tests": 685,
+        "unit_tests": 686,
         "python_versions": ["3.11", "3.12"],
         "compileall": "passed",
         "isolated_acceptance_trust_adapter": "passed",
+        "independent_abt_diagnostic_namespace": "passed",
         "snapshot_anchor_and_transition_advance": "passed",
         "canonical_hash_chained_trust_state": "passed",
         "external_state_pin": "passed",
