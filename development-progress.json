@@ -277,7 +277,7 @@
       "status": "completed",
       "summary": "Added portable append-only consistency proofs between externally pinned checkpoints using canonical compact hash frontiers, proof-only verification, immutable artifacts, and explicit rollback/fork denials.",
       "verification": {
-        "unit_tests": 201,
+        "unit_tests": 202,
         "python_versions": [
           "3.11",
           "3.12"
