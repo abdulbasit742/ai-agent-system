@@ -1,0 +1,165 @@
+name: audit-trust-receiver-consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  receiver-consistency-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test receiver consistency proofs
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_consistency.py" -v
+      - name: Re-run receiver checkpoint and state regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_cli.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_consistency.py tests/test_audit_trust_receiver_consistency.py
+
+  receiver-consistency-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prove receiver continuity and reject rollback, fork, stale pins, and tampering
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-receiver-consistency"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          from agent_audit_trust_receiver import canonical_json
+          from agent_audit_trust_receiver_checkpoint import create_checkpoint
+          from test_audit_trust_receiver_consistency import receiver_state
+
+          root = Path(os.environ["ROOT"])
+          previous = receiver_state(2)
+          candidate = receiver_state(7)
+          rollback = receiver_state(1)
+          fork = receiver_state(2, branch_seed=2)
+          payloads = {
+              "previous-state.json": previous,
+              "candidate-state.json": candidate,
+              "rollback-state.json": rollback,
+              "fork-state.json": fork,
+              "previous-checkpoint.json": create_checkpoint(previous),
+              "candidate-checkpoint.json": create_checkpoint(candidate),
+              "rollback-checkpoint.json": create_checkpoint(rollback),
+              "fork-checkpoint.json": create_checkpoint(fork),
+          }
+          for name, payload in payloads.items():
+              (root / name).write_bytes(canonical_json(payload))
+          (root / "pins.json").write_text(json.dumps({
+              "previous_state": previous["state_id"],
+              "candidate_state": candidate["state_id"],
+              "rollback_state": rollback["state_id"],
+              "fork_state": fork["state_id"],
+              "previous_checkpoint": payloads["previous-checkpoint.json"]["checkpoint_id"],
+              "candidate_checkpoint": payloads["candidate-checkpoint.json"]["checkpoint_id"],
+              "rollback_checkpoint": payloads["rollback-checkpoint.json"]["checkpoint_id"],
+              "fork_checkpoint": payloads["fork-checkpoint.json"]["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          PREVIOUS_STATE=$(pin previous_state)
+          CANDIDATE_STATE=$(pin candidate_state)
+          ROLLBACK_STATE=$(pin rollback_state)
+          FORK_STATE=$(pin fork_state)
+          PREVIOUS_CHECKPOINT=$(pin previous_checkpoint)
+          CANDIDATE_CHECKPOINT=$(pin candidate_checkpoint)
+          ROLLBACK_CHECKPOINT=$(pin rollback_checkpoint)
+          FORK_CHECKPOINT=$(pin fork_checkpoint)
+          python agent_audit_trust_receiver_consistency.py prove \
+            "$ROOT/previous-state.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/consistency.json" \
+            --expected-previous-state-id "$PREVIOUS_STATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT" \
+            --expected-candidate-state-id "$CANDIDATE_STATE" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/prove.json"
+          cp "$ROOT/consistency.json" "$ROOT/consistency-tampered.json"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path(os.environ["ROOT"]) / "consistency-tampered.json"
+          payload = json.loads(path.read_text())
+          payload["append_frontier"][0]["hash"] = "f" * 64
+          path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+          PY
+          set +e
+          python agent_audit_trust_receiver_consistency.py prove \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/rollback-state.json" "$ROOT/rollback-checkpoint.json" \
+            "$ROOT/rollback-proof.json" \
+            --expected-previous-state-id "$CANDIDATE_STATE" \
+            --expected-previous-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --expected-candidate-state-id "$ROLLBACK_STATE" \
+            --expected-candidate-checkpoint-id "$ROLLBACK_CHECKPOINT" \
+            --format json > "$ROOT/rollback.json" 2> "$ROOT/rollback-error.json"
+          ROLLBACK=$?
+          python agent_audit_trust_receiver_consistency.py prove \
+            "$ROOT/previous-state.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/fork-state.json" "$ROOT/fork-checkpoint.json" \
+            "$ROOT/fork-proof.json" \
+            --expected-previous-state-id "$PREVIOUS_STATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT" \
+            --expected-candidate-state-id "$FORK_STATE" \
+            --expected-candidate-checkpoint-id "$FORK_CHECKPOINT" \
+            --format json > "$ROOT/fork.json" 2> "$ROOT/fork-error.json"
+          FORK=$?
+          python agent_audit_trust_receiver_consistency.py verify \
+            "$ROOT/consistency.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$(printf 'f%.0s' {1..64})" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          python agent_audit_trust_receiver_consistency.py verify \
+            "$ROOT/consistency-tampered.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/tampered.json" 2> "$ROOT/tampered-error.json"
+          TAMPERED=$?
+          set -e
+          test "$ROLLBACK" -eq 1
+          test "$FORK" -eq 1
+          test "$STALE" -eq 1
+          test "$TAMPERED" -eq 2
+          test ! -e "$ROOT/rollback-proof.json"
+          test ! -e "$ROOT/fork-proof.json"
+          rm "$ROOT/previous-state.json" "$ROOT/candidate-state.json" \
+             "$ROOT/rollback-state.json" "$ROOT/fork-state.json"
+          python agent_audit_trust_receiver_consistency.py verify \
+            "$ROOT/consistency.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/verify.json"
+          python -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["relation"]=="right-descendant"' "$ROOT/verify.json"
+      - name: Preserve receiver consistency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-consistency-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver-consistency/
+          if-no-files-found: warn
