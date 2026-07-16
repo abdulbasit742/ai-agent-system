@@ -101,8 +101,12 @@ All notable public distribution changes are recorded here.
 - exact receiver checkpoint/state/count and underlying trust checkpoint/state/count predecessor binding with receiver, trust-entry, and generation delta verification
 - stable `ARS001` through `ARS010` diagnostics for unsafe paths, stale pins, admission denials, wrong roles, head mismatch, replay, rollback, non-advancement, and lock failures
 - lock-coordinated mode-0600 atomic acceptance-state updates that preserve bytes on denied and invalid operations
-- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, trust-handoff, trust-handoff-admission, trust-receiver, receiver-checkpoint, receiver-consistency, receiver-bundle, receiver-admission, and receiver-acceptance aliases, a reviewed twenty-nine-module/thirty-eight-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff/trust-handoff-admission/trust-receiver/receiver-checkpoint/receiver-consistency/receiver-bundle/receiver-admission/receiver-acceptance, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable acceptance-state Merkle checkpoints and per-receiver-bundle inclusion proofs with proof-only and optional complete receiver-bundle verification
+- compact append-only acceptance consistency proofs with independent root reconstruction and authenticated receiver/trust transition boundaries
+- portable snapshot and transition receiver-acceptance checkpoint bundles with exact manifests, checksums, external pins, mandatory candidate-head proofs, and offline verification
+- stable `ASC001` through `ASC011`, `ASR001` through `ASR011`, and `AAB001` through `AAB012` diagnostics for acceptance checkpoint, consistency, and bundle controls
+- installed audit, trust, receiver, receiver-acceptance, checkpoint, consistency, admission, and bundle aliases; a reviewed thirty-two-module/forty-four-command wheel; and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, complete audit/trust/receiver/acceptance verification, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 

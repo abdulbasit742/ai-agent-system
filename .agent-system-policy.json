@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "suppressions": [
+    {
+      "id": "reviewed-acceptance-bundle-adapter",
+      "rule_id": "BAS013",
+      "path": "agent_audit_trust_receiver_acceptance_bundle.py",
+      "fingerprint": "0c769914c3b859bf16c31cc056b4df0046c0ca5d2abc677ab35fab923e659bbc",
+      "owner": "repository-security",
+      "reason": "Executes only the packaged reviewed receiver-bundle source after a fixed fail-closed acceptance token transformation; no external source or runtime input is compiled.",
+      "expires": "2027-07-16"
+    }
+  ]
+}
