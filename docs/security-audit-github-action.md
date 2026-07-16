@@ -11,15 +11,18 @@ Task 5 adds a composite GitHub Action and a Python runner. This document records
 
 ## Filesystem containment
 
-- Scan, configuration, policy, baseline, JSON, and SARIF paths are repository-relative.
+- Scan, configuration, policy, and baseline paths are repository-relative.
 - Absolute paths and parent traversal are rejected.
-- Every path is resolved and must remain beneath `GITHUB_WORKSPACE`, including symlink resolution.
+- Every input path is resolved and must remain beneath `GITHUB_WORKSPACE`, including symlink resolution.
 - Optional control files must already exist.
 - The scan path must be an existing directory.
+- JSON and SARIF outputs are independently confined beneath `.agent-system/`.
+- Report and SARIF paths must be different files and cannot escape the generated directory through symlinks.
 
 ## Output integrity
 
-- Existing JSON and SARIF output files are deleted before scanner execution.
+- Existing JSON and SARIF output files are deleted before scanner execution only after the generated-output boundary succeeds.
+- Cleanup cannot target ordinary source, baseline, configuration, policy, or documentation files.
 - A missing or malformed fresh JSON report causes exit status `2`.
 - Stale successful output cannot hide a scanner configuration or execution failure.
 - GitHub outputs are single-line validated values written through `GITHUB_OUTPUT`.
