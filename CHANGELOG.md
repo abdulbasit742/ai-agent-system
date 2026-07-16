@@ -19,7 +19,10 @@ All notable public distribution changes are recorded here.
 - verified release-to-release comparison with stable `TRNxxx` rollback, replay, mutation, interface, dependency, and license controls
 - deterministic module-hash, console-command, dependency-count, and license-set change reports with canonical transition IDs
 - caller-pinned previous release IDs and candidate commit/version/release identities for offline transition authorization
-- read-only CI release-readiness, admission, and transition artifacts with no publication, signing key, OIDC request, or registry credentials
+- canonical hash-chained consumer trust states with externally retained `state_id` rollback and fork checkpoints
+- lock-coordinated atomic trust-state advancement that records only accepted transition IDs and policy hashes
+- stale-pin, duplicate-release, non-canonical serialization, symlink, truncation, and tampered-history rejection
+- read-only CI release-readiness, admission, transition, and trust-state artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
