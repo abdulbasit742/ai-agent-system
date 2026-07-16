@@ -14,7 +14,7 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - versioned typed audit events with privacy-preserving path, command, and Git-ref references
 - atomic audit segment rotation with canonical sealed manifests and linked active logs
 - canonical segment catalogs with automatic archive discovery and pinned right-descendant synchronization
-- portable catalog Merkle checkpoints and per-segment inclusion proofs
+- portable catalog Merkle checkpoints, per-segment inclusion proofs, and compact append-only consistency proofs
 - reproducible release bundles with exact source identity and SHA-256 checksums
 - deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
 - consumer release-admission policies and verified release-transition rollback gates
@@ -59,13 +59,15 @@ Installed commands include:
 ```bash
 basit-agent --version
 basit-agent scan . --format json --fail-on high
-basit-agent guard git reset --hard HEAD~1
-basit-agent audit --format json
-basit-agent audit-events --format json
 basit-agent-lines . --changed-from origin/main --format sarif
 basit-agent-segments rotate --path .agent-system/audit.jsonl --output-dir audit-archive/0001
 basit-agent-catalog init audit-archive/catalog.json --active .agent-system/audit.jsonl
 basit-agent-catalog-checkpoint create audit-archive/catalog.json checkpoint.json --expected-catalog-id "$CATALOG_ID"
+basit-agent-catalog-consistency verify consistency.json retained-checkpoint.json candidate-checkpoint.json \
+  --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
 ```
 
 Compatibility aliases are:
@@ -75,8 +77,9 @@ Compatibility aliases are:
 - `agent-audit-segments`
 - `agent-audit-catalog`
 - `agent-audit-catalog-checkpoint`
+- `agent-audit-catalog-consistency`
 
-The wheel has no runtime dependencies and contains only the fourteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, segment archives, catalog files, checkpoint files, proof files, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
+The wheel has no runtime dependencies and contains only the fifteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, inclusion/consistency proofs, reports, tests, integrations, and generated evidence never enter the wheel.
 
 Installed-wheel `doctor` and integration `run` fail closed because external integrations remain source-checkout-only.
 
@@ -99,7 +102,7 @@ python agent_system.py audit \
   --format json
 ```
 
-Create a new immutable copy containing only the verified prefix of a damaged log:
+Create an immutable copy containing only the verified prefix of a damaged log:
 
 ```bash
 python agent_system.py audit \
@@ -122,21 +125,12 @@ Paths, command arrays, and Git refs are stored as domain-separated SHA-256 refer
 
 ```bash
 python agent_system.py audit-events --format json
-python agent_system.py audit \
-  --path .agent-system/audit.jsonl \
-  --require-typed \
-  --expected-records "$EXPECTED_RECORDS" \
-  --expected-head "$EXPECTED_HEAD" \
-  --format json
+python agent_system.py audit --path .agent-system/audit.jsonl --require-typed --format json
 ```
-
-Stable event rules are `AUD022` through `AUD024`.
 
 See [docs/audit-event-admission.md](docs/audit-event-admission.md) and [docs/security-audit-event-admission.md](docs/security-audit-event-admission.md).
 
 ## Audit segment rotation
-
-Seal a verified, fully typed active log before it reaches the reviewed size boundary:
 
 ```bash
 basit-agent-segments rotate \
@@ -145,11 +139,7 @@ basit-agent-segments rotate \
   --expected-records "$EXPECTED_RECORDS" \
   --expected-head "$EXPECTED_HEAD" \
   --format json
-```
 
-Verify complete archived history plus the current active log:
-
-```bash
 basit-agent-segments verify \
   audit-archive/0001 audit-archive/0002 \
   --active .agent-system/audit.jsonl \
@@ -159,99 +149,87 @@ basit-agent-segments verify \
 
 Every archive contains exact `segment.jsonl` bytes and a canonical `manifest.json`. The archive verifies before the active log is atomically replaced with one typed continuity record. Existing directories are never overwritten.
 
-Retain the latest segment ID separately. Segment manifests are unsigned integrity commitments, not authenticated operator statements.
-
 See [docs/audit-segment-rotation.md](docs/audit-segment-rotation.md) and [docs/security-audit-segment-rotation.md](docs/security-audit-segment-rotation.md).
 
 ## Audit segment catalogs
 
-A catalog removes the need to manually order archive directories. It discovers every immediate sealed segment directory, verifies each manifest and data file, sorts by the committed segment index, and requires exact coverage of the archive root.
-
 ```bash
 basit-agent-catalog init audit-archive/catalog.json \
-  --active .agent-system/audit.jsonl \
-  --format json
+  --active .agent-system/audit.jsonl --format json
 
 agent-audit-catalog verify audit-archive/catalog.json \
   --expected-catalog-id "$CATALOG_ID" \
-  --active .agent-system/audit.jsonl \
-  --format json
+  --active .agent-system/audit.jsonl --format json
 
 basit-agent-catalog sync audit-archive/catalog.json \
   --expected-catalog-id "$CATALOG_ID" \
-  --active .agent-system/audit.jsonl \
-  --format json
+  --active .agent-system/audit.jsonl --format json
 ```
 
-Synchronization accepts only an exact right-descendant extension of the pinned catalog. Missing, renamed, replaced, reordered, extra, or forked segments fail closed. A verified no-op does not rewrite catalog bytes. After a successful update, replace the retained pin with the new `catalog_id`.
-
-Catalogs are unsigned integrity commitments. They do not authenticate an operator or merge forks automatically.
+Synchronization accepts only an exact right-descendant extension of the pinned catalog. Missing, renamed, replaced, reordered, extra, or forked segments fail closed. A verified no-op does not rewrite catalog bytes.
 
 See [docs/audit-segment-catalog.md](docs/audit-segment-catalog.md) and [docs/security-audit-segment-catalog.md](docs/security-audit-segment-catalog.md).
 
 ## Portable audit catalog checkpoints
 
-A checkpoint commits one exact pinned catalog generation to an RFC 6962-style Merkle root. A compact proof demonstrates that one complete catalog segment entry belongs to that checkpoint without distributing the full catalog.
-
-Create and retain a checkpoint ID:
+A checkpoint commits one exact pinned catalog generation to an RFC 6962-style Merkle root. A compact proof demonstrates membership of one complete segment entry without distributing the full catalog.
 
 ```bash
 basit-agent-catalog-checkpoint create \
-  audit-archive/catalog.json \
-  audit-catalog-checkpoint.json \
+  audit-archive/catalog.json audit-catalog-checkpoint.json \
   --expected-catalog-id "$CATALOG_ID" \
-  --active .agent-system/audit.jsonl \
-  --format json
-```
+  --active .agent-system/audit.jsonl --format json
 
-Create a proof by exact segment index or ID:
-
-```bash
 basit-agent-catalog-checkpoint prove \
-  audit-archive/catalog.json \
-  audit-catalog-checkpoint.json \
-  segment-proof.json \
+  audit-archive/catalog.json audit-catalog-checkpoint.json segment-proof.json \
   --expected-catalog-id "$CATALOG_ID" \
   --expected-checkpoint-id "$CHECKPOINT_ID" \
-  --segment-index 12 \
-  --format json
-```
+  --segment-index 12 --format json
 
-Verify membership without the complete catalog, and optionally rebind it to the actual sealed segment directory:
-
-```bash
 agent-audit-catalog-checkpoint verify-proof \
-  segment-proof.json \
-  audit-catalog-checkpoint.json \
+  segment-proof.json audit-catalog-checkpoint.json \
   --expected-checkpoint-id "$CHECKPOINT_ID" \
-  --segment-dir audit-archive/segment-0012 \
-  --format json
+  --segment-dir audit-archive/segment-0012 --format json
 ```
-
-Leaves and nodes use distinct SHA-256 domains, odd leaves are never duplicated, and missing or extra audit-path hashes fail closed. Checkpoint and proof files are immutable no-overwrite evidence. Retain `checkpoint_id` separately: these unsigned hashes prove integrity and inclusion, not producer identity or freshness by themselves.
 
 See [docs/audit-catalog-checkpoints.md](docs/audit-catalog-checkpoints.md) and [docs/security-audit-catalog-checkpoints.md](docs/security-audit-catalog-checkpoints.md).
 
-## Pull-request change gates
+## Audit catalog consistency proofs
 
-Scan only files changed from a reviewed base reference:
+A consistency proof shows that a candidate checkpoint retains every segment entry committed by a retained checkpoint. Full catalogs and segment archives are needed during proof creation, but proof verification needs only the compact proof, two checkpoints, and four externally retained IDs.
 
 ```bash
-python agent_system.py scan . \
-  --changed-from origin/main \
-  --format json \
-  --fail-on high
+basit-agent-catalog-consistency prove \
+  retained/segments/catalog.json retained-checkpoint.json \
+  candidate/segments/catalog.json candidate-checkpoint.json \
+  catalog-consistency.json \
+  --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+  --candidate-active candidate/active.jsonl --format json
+
+agent-audit-catalog-consistency verify \
+  catalog-consistency.json retained-checkpoint.json candidate-checkpoint.json \
+  --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
+  --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+  --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+  --format json
 ```
 
-Report only findings beginning on added or replaced lines:
+A direct next generation must retain the previous catalog ID. A larger generation gap proves append-only segment continuity but does not authenticate omitted intermediate checkpoints. Stable denials are `AUK009` rollback, `AUK010` fork/predecessor mismatch, and `AUK011` generation regression.
+
+These unsigned proofs establish integrity and append-only continuity, not producer identity, witness consensus, or public transparency-log publication.
+
+See [docs/audit-catalog-consistency.md](docs/audit-catalog-consistency.md) and [docs/security-audit-catalog-consistency.md](docs/security-audit-catalog-consistency.md).
+
+## Pull-request change gates
 
 ```bash
-python agent_changed_lines.py . \
-  --changed-from origin/main \
-  --new-only \
-  --show-existing \
-  --format sarif \
-  --output agent-system.sarif
+python agent_system.py scan . --changed-from origin/main --format json --fail-on high
+python agent_changed_lines.py . --changed-from origin/main --new-only --show-existing \
+  --format sarif --output agent-system.sarif
 ```
 
 Refs resolve to commit SHAs, merge-base diffs use NUL-delimited paths, and paths remain repository-bound.
@@ -262,8 +240,7 @@ See [docs/changed-file-gating.md](docs/changed-file-gating.md) and [docs/added-l
 
 ```yaml
 name: agent-security
-on:
-  pull_request:
+on: [pull_request]
 permissions:
   contents: read
 jobs:
@@ -280,9 +257,9 @@ jobs:
           annotations: true
 ```
 
-Supported modes are `full`, `changed-files`, and `added-lines`. Pull-request defaults use exact base/head SHAs. Generated JSON/SARIF remains under `.agent-system/`, and annotations omit scanner preview evidence.
+Supported modes are `full`, `changed-files`, and `added-lines`. Generated JSON/SARIF remains under `.agent-system/`, and annotations omit scanner preview evidence.
 
-See [docs/github-action.md](docs/github-action.md) and [examples/github-actions/security.yml.example](examples/github-actions/security.yml.example).
+See [docs/github-action.md](docs/github-action.md).
 
 ## Baselines, configuration, and suppressions
 
@@ -295,8 +272,6 @@ python agent_system.py scan . --new-only --format json --fail-on high
 
 The mandatory `core` pack and rules `BAS000` through `BAS003` cannot be disabled. Suppressions require an owner, meaningful reason, and expiration. Baselines omit source previews and are bound to active controls.
 
-See [docs/rule-pack-configuration.md](docs/rule-pack-configuration.md), [docs/policy-suppressions.md](docs/policy-suppressions.md), and [docs/baseline-gating.md](docs/baseline-gating.md).
-
 ## Reproducible releases and evidence
 
 ```bash
@@ -305,16 +280,13 @@ python -m pip wheel . --no-deps --wheel-dir dist-one
 python -m pip wheel . --no-deps --wheel-dir dist-two
 python scripts/release_bundle.py compare dist-one/*.whl dist-two/*.whl
 python scripts/release_bundle.py create \
-  --wheel dist-one/*.whl \
-  --output-dir release \
+  --wheel dist-one/*.whl --output-dir release \
   --source-commit "$(git rev-parse HEAD)" \
   --source-date-epoch "$SOURCE_DATE_EPOCH"
 python scripts/release_bundle.py verify release
 ```
 
 Each bundle contains the wheel, SPDX 2.3 SBOM, unsigned in-toto/SLSA provenance, canonical manifest, and checksums. Verification regenerates expected evidence from the wheel.
-
-See [docs/reproducible-releases.md](docs/reproducible-releases.md) and [docs/supply-chain-evidence.md](docs/supply-chain-evidence.md).
 
 ## Admission, transitions, and retained trust
 
@@ -333,8 +305,6 @@ python scripts/release_transition.py gate trusted-release candidate-release \
 
 Accepted transitions can be retained in a pinned hash-chained trust state, summarized by Merkle checkpoints, proved per release, and compared using compact consistency proofs.
 
-See [docs/release-admission.md](docs/release-admission.md), [docs/release-transition.md](docs/release-transition.md), [docs/release-trust-state.md](docs/release-trust-state.md), [docs/release-checkpoints.md](docs/release-checkpoints.md), and [docs/release-consistency.md](docs/release-consistency.md).
-
 ## Safe dispatch
 
 ```bash
@@ -348,14 +318,8 @@ Integration execution is shown first and does nothing until `--approve` is suppl
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
-python agent_system.py config .agent-system.example.json
-python agent_system.py policy .agent-system-policy.example.json
-python agent_system.py audit-events --format json
-python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
-python -m unittest discover -s tests -p "test_audit_segments.py" -v
-python -m unittest discover -s tests -p "test_audit_catalog.py" -v
-python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
+python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+python -m unittest discover -s tests -p "test_audit_catalog_consistency.py" -v
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```

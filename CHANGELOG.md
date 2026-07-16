@@ -25,7 +25,7 @@ All notable public distribution changes are recorded here.
 - canonical unsigned Merkle checkpoints with externally retained `checkpoint_id` freshness pins
 - portable inclusion proofs for individual trusted releases without distributing the complete history
 - stable `CHK010` rollback and `CHK011` fork lineage denials with common-prefix diagnostics
-- compact append-only consistency proofs that reconstruct retained and candidate checkpoint roots from `O(log n)` hashes
+- compact append-only release consistency proofs that reconstruct retained and candidate checkpoint roots from `O(log n)` hashes
 - canonical aligned power-of-two prefix/suffix frontiers with rehashed-layout and subtree-tamper rejection
 - stable `CNS010` rollback and `CNS011` fork denials that never create proof artifacts
 - strict canonical JSON Lines audit records with versioned sequences and complete-chain append preflight
@@ -49,8 +49,12 @@ All notable public distribution changes are recorded here.
 - compact per-segment inclusion proofs with proof-only verification and optional sealed-directory evidence binding
 - domain-separated leaf, node, checkpoint, and proof hashes with rehashed audit-path tamper rejection
 - stable `AUP001` through `AUP010` diagnostics and externally retained checkpoint freshness pins
-- two installed checkpoint commands, a reviewed fourteen-module/ten-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, admission, transition, trust-state, release-checkpoint, consistency, audit-integrity, event-admission, segment, catalog, and catalog-checkpoint artifacts with no publication, signing key, OIDC request, or registry credentials
+- compact append-only catalog consistency proofs with canonical previous/append frontiers and proof-only checkpoint verification
+- direct predecessor binding, multi-generation append-only continuity, and logarithmic proof size
+- stable `AUK009` rollback, `AUK010` fork/predecessor, and `AUK011` generation-regression denials
+- rehashed frontier, noncanonical layout, stale pin, unsafe output, and checkpoint-substitution rejection
+- installed consistency aliases, a reviewed fifteen-module/twelve-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, admission, transition, trust-state, release-checkpoint, release-consistency, audit-integrity, event-admission, segment, catalog, catalog-checkpoint, and catalog-consistency artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
