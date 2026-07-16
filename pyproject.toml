@@ -39,6 +39,7 @@ agent-changed-lines = "agent_cli:changed_lines_main"
 [tool.setuptools]
 include-package-data = false
 py-modules = [
+  "agent_audit",
   "agent_baseline",
   "agent_changed_lines",
   "agent_cli",
@@ -46,6 +47,7 @@ py-modules = [
   "agent_git",
   "agent_policy",
   "agent_system",
+  "agent_system_legacy",
   "agent_version",
 ]
 

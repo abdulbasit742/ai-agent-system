@@ -28,7 +28,11 @@ All notable public distribution changes are recorded here.
 - compact append-only consistency proofs that reconstruct retained and candidate checkpoint roots from `O(log n)` hashes
 - canonical aligned power-of-two prefix/suffix frontiers with rehashed-layout and subtree-tamper rejection
 - stable `CNS010` rollback and `CNS011` fork denials that never create proof artifacts
-- read-only CI release-readiness, admission, transition, trust-state, checkpoint, and consistency artifacts with no publication, signing key, OIDC request, or registry credentials
+- strict canonical JSON Lines audit records with versioned sequences and complete-chain append preflight
+- stable `AUDxxx` diagnostics for malformed JSON, duplicate keys, partial writes, schema drift, chain breaks, and canonicalization failures
+- externally pinned audit record counts and head hashes for rollback/replay detection
+- immutable atomic verified-prefix recovery copies that never mutate damaged source logs
+- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, and audit-integrity artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 

@@ -80,6 +80,7 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertEqual(
             {
+                "agent_audit",
                 "agent_baseline",
                 "agent_changed_lines",
                 "agent_cli",
@@ -87,6 +88,7 @@ class PackagingTests(unittest.TestCase):
                 "agent_git",
                 "agent_policy",
                 "agent_system",
+                "agent_system_legacy",
                 "agent_version",
             },
             set(setuptools["py-modules"]),
