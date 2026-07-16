@@ -14,6 +14,7 @@
     "max_size_bytes": 1048576,
     "modules": [
       "agent_audit.py",
+      "agent_audit_admission.py",
       "agent_audit_bundle.py",
       "agent_audit_catalog.py",
       "agent_audit_checkpoint.py",
@@ -31,6 +32,7 @@
       "agent_version.py"
     ],
     "console_scripts": [
+      "agent-audit-admission",
       "agent-audit-bundle",
       "agent-audit-catalog",
       "agent-audit-catalog-checkpoint",
@@ -39,6 +41,7 @@
       "agent-changed-lines",
       "agent-system",
       "basit-agent",
+      "basit-agent-audit-admission",
       "basit-agent-audit-bundle",
       "basit-agent-catalog",
       "basit-agent-catalog-checkpoint",

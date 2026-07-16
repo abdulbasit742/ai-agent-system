@@ -44,7 +44,10 @@ class PackagingTests(unittest.TestCase):
 
     def test_added_line_cli_delegates_argument_array(self):
         arguments = [".", "--changed-from", "HEAD~1"]
-        with mock.patch("agent_cli.agent_changed_lines.main", return_value=5) as delegated:
+        with mock.patch(
+            "agent_cli.agent_changed_lines.main",
+            return_value=5,
+        ) as delegated:
             status = agent_cli.changed_lines_main(arguments)
         self.assertEqual(5, status)
         delegated.assert_called_once_with(arguments)
@@ -58,7 +61,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("requires a source checkout", error.getvalue())
 
     def test_pyproject_has_reviewed_dependency_free_boundary(self):
-        payload = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+        payload = tomllib.loads(
+            Path("pyproject.toml").read_text(encoding="utf-8")
+        )
         project = payload["project"]
         setuptools = payload["tool"]["setuptools"]
         self.assertEqual("basit-agent-system", project["name"])
@@ -71,6 +76,7 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertEqual(
             {
+                "agent-audit-admission",
                 "agent-audit-bundle",
                 "agent-audit-catalog",
                 "agent-audit-catalog-checkpoint",
@@ -79,6 +85,7 @@ class PackagingTests(unittest.TestCase):
                 "agent-changed-lines",
                 "agent-system",
                 "basit-agent",
+                "basit-agent-audit-admission",
                 "basit-agent-audit-bundle",
                 "basit-agent-catalog",
                 "basit-agent-catalog-checkpoint",
@@ -91,6 +98,7 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(
             {
                 "agent_audit",
+                "agent_audit_admission",
                 "agent_audit_bundle",
                 "agent_audit_catalog",
                 "agent_audit_checkpoint",

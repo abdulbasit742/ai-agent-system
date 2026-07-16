@@ -1,0 +1,36 @@
+{
+  "bundle": {
+    "allowed_types": [
+      "snapshot",
+      "transition"
+    ],
+    "max_bytes": 268435456,
+    "max_files": 1024,
+    "max_proofs": 128,
+    "min_proofs": 1,
+    "sealed_segments": "optional"
+  },
+  "candidate": {
+    "allowed_catalog_ids": [],
+    "max_generation": 1000000,
+    "max_segment_count": 1000000,
+    "min_generation": 1,
+    "min_segment_count": 1
+  },
+  "selection": {
+    "allowed_segment_ids": [],
+    "allowed_segment_indexes": [],
+    "required_segment_ids": [],
+    "required_segment_indexes": []
+  },
+  "transition": {
+    "allowed_previous_catalog_ids": [],
+    "allowed_relations": [
+      "right-descendant"
+    ],
+    "max_generation_delta": 1000000,
+    "min_generation_delta": 1,
+    "require_direct_predecessor": false
+  },
+  "version": 1
+}

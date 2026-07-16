@@ -1,0 +1,171 @@
+name: audit-bundle-admission
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  admission-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test audit bundle admission policy
+        run: |
+          set +e
+          python -m unittest discover -s tests -p "test_audit_bundle_admission.py" -v \
+            > "$RUNNER_TEMP/audit-bundle-admission-tests.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            tail -n 240 "$RUNNER_TEMP/audit-bundle-admission-tests.log"
+            exit "$STATUS"
+          fi
+          cat "$RUNNER_TEMP/audit-bundle-admission-tests.log"
+      - name: Re-run portable bundle regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_evidence_bundle.py" -v
+          python -m unittest discover -s tests -p "test_audit_catalog_consistency.py" -v
+          python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
+      - name: Compile admission runtime
+        run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_audit_bundle.py agent_audit_admission.py agent_system.py tests/test_audit_bundle_admission.py
+      - name: Preserve admission diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-bundle-admission-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-bundle-admission-tests.log
+          if-no-files-found: warn
+
+  admission-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create, admit, deny, and invalidate a real bundle
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-bundle-admission"
+          ARCHIVE="$ROOT/segments"
+          ACTIVE="$ROOT/active.jsonl"
+          CATALOG="$ARCHIVE/catalog.json"
+          CHECKPOINT="$ROOT/checkpoint.json"
+          PROOF="$ROOT/proof.json"
+          BUNDLE="$ROOT/bundle"
+          POLICY="$ROOT/policy.json"
+          mkdir -p "$ARCHIVE"
+
+          python agent_system.py --audit-log "$ACTIVE" scan . \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          python agent_audit_segments.py rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/segment-one" --format json \
+            > "$ROOT/rotate.json"
+          python agent_audit_catalog.py init "$CATALOG" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog.json"
+          CATALOG_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog.json")
+          python agent_audit_checkpoint.py create "$CATALOG" "$CHECKPOINT" \
+            --expected-catalog-id "$CATALOG_ID" --active "$ACTIVE" \
+            --format json > "$ROOT/checkpoint-report.json"
+          CHECKPOINT_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["checkpoint_id"])' "$ROOT/checkpoint-report.json")
+          python agent_audit_checkpoint.py prove "$CATALOG" "$CHECKPOINT" "$PROOF" \
+            --expected-catalog-id "$CATALOG_ID" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --active "$ACTIVE" --segment-index 1 --format json \
+            > "$ROOT/proof-report.json"
+          python agent_audit_bundle.py create "$BUNDLE" \
+            --checkpoint "$CHECKPOINT" \
+            --expected-checkpoint-id "$CHECKPOINT_ID" \
+            --proof "$PROOF" --segment-root "$ARCHIVE" --format json \
+            > "$ROOT/bundle-report.json"
+          BUNDLE_ID=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/bundle-report.json")
+
+          python agent_audit_admission.py init "$POLICY" --format json \
+            > "$ROOT/policy-init.json"
+          python agent_audit_admission.py validate "$POLICY" --format json \
+            > "$ROOT/policy-validate.json"
+          python agent_audit_admission.py evaluate "$BUNDLE" \
+            --policy "$POLICY" \
+            --expected-bundle-id "$BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/admitted.json"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-bundle-admission'
+          policy = json.loads((root / 'policy.json').read_text())
+          policy['bundle']['allowed_types'] = ['transition']
+          (root / 'denied-policy.json').write_text(
+              json.dumps(policy, sort_keys=True, indent=2) + '\n'
+          )
+          PY
+          set +e
+          python agent_audit_admission.py evaluate "$BUNDLE" \
+            --policy "$ROOT/denied-policy.json" \
+            --expected-bundle-id "$BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/denied.json" 2> "$ROOT/denied.err"
+          DENIED_STATUS=$?
+          set -e
+          test "$DENIED_STATUS" -eq 1
+
+          cp -R "$BUNDLE" "$ROOT/tampered-bundle"
+          printf 'extra\n' > "$ROOT/tampered-bundle/extra.txt"
+          set +e
+          python agent_audit_admission.py evaluate "$ROOT/tampered-bundle" \
+            --policy "$POLICY" \
+            --expected-bundle-id "$BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/tampered.json" 2> "$ROOT/tampered.err"
+          TAMPER_STATUS=$?
+          set -e
+          test "$TAMPER_STATUS" -eq 2
+
+          cp "$POLICY" "$BUNDLE/internal-policy.json"
+          set +e
+          python agent_audit_admission.py evaluate "$BUNDLE" \
+            --policy "$BUNDLE/internal-policy.json" \
+            --expected-bundle-id "$BUNDLE_ID" \
+            --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
+            --format json > "$ROOT/internal.json" 2> "$ROOT/internal.err"
+          INTERNAL_STATUS=$?
+          set -e
+          test "$INTERNAL_STATUS" -eq 2
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'audit-bundle-admission'
+          admitted = json.loads((root / 'admitted.json').read_text())
+          denied = json.loads((root / 'denied.json').read_text())
+          policy = json.loads((root / 'policy-validate.json').read_text())
+          assert admitted['admitted'] is True
+          assert admitted['violations'] == []
+          assert admitted['evidence']['proof_count'] == 1
+          assert admitted['evidence']['sealed_segment_count'] == 1
+          assert len(admitted['decision_id']) == 64
+          assert len(admitted['policy_sha256']) == 64
+          assert denied['admitted'] is False
+          assert denied['violations'][0]['rule_id'] == 'AUA001'
+          assert policy['valid'] is True
+          assert len(policy['policy_sha256']) == 64
+          assert 'AUA016' in (root / 'internal.err').read_text()
+          PY
+      - name: Preserve admission decisions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basit-agent-system-audit-bundle-admission-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-bundle-admission/
+          if-no-files-found: error

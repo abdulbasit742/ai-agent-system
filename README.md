@@ -12,13 +12,11 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - installable dependency-free Python package with an exact reviewed wheel boundary
 - strict canonical audit chains with external freshness pins and safe recovery copies
 - versioned typed audit events with privacy-preserving path, command, and Git-ref references
-- atomic audit segment rotation with canonical sealed manifests and linked active logs
-- canonical segment catalogs with automatic archive discovery and pinned right-descendant synchronization
-- portable catalog Merkle checkpoints, per-segment inclusion proofs, and compact append-only consistency proofs
-- reproducible release bundles with exact source identity and SHA-256 checksums
-- deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
-- consumer release-admission policies and verified release-transition rollback gates
-- pinned release trust states, Merkle checkpoints, inclusion proofs, and compact consistency proofs
+- atomic audit segment rotation, canonical catalogs, Merkle checkpoints, inclusion proofs, and compact consistency proofs
+- portable snapshot and transition audit evidence bundles
+- consumer-owned audit bundle admission policies with deterministic decisions
+- reproducible release bundles with deterministic SPDX SBOM and in-toto/SLSA-style provenance
+- consumer release-admission policies, verified transition gates, pinned trust states, release checkpoints, and consistency proofs
 - destructive-command policy gate and dry-run-first integration dispatcher
 - credential, PII, and prompt-marker redaction
 - versioned suppression policies with ownership, justification, and expiration
@@ -54,7 +52,7 @@ Or install a local checkout:
 python -m pip install .
 ```
 
-Installed commands include:
+Representative installed commands:
 
 ```bash
 basit-agent --version
@@ -62,12 +60,20 @@ basit-agent scan . --format json --fail-on high
 basit-agent-lines . --changed-from origin/main --format sarif
 basit-agent-segments rotate --path .agent-system/audit.jsonl --output-dir audit-archive/0001
 basit-agent-catalog init audit-archive/catalog.json --active .agent-system/audit.jsonl
-basit-agent-catalog-checkpoint create audit-archive/catalog.json checkpoint.json --expected-catalog-id "$CATALOG_ID"
+basit-agent-catalog-checkpoint create audit-archive/catalog.json checkpoint.json \
+  --expected-catalog-id "$CATALOG_ID"
 basit-agent-catalog-consistency verify consistency.json retained-checkpoint.json candidate-checkpoint.json \
   --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
   --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
   --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
   --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+basit-agent-audit-bundle verify audit-handoff \
+  --expected-bundle-id "$BUNDLE_ID" \
+  --expected-checkpoint-id "$CHECKPOINT_ID"
+basit-agent-audit-admission evaluate audit-handoff \
+  --policy audit-admission.json \
+  --expected-bundle-id "$BUNDLE_ID" \
+  --expected-candidate-checkpoint-id "$CHECKPOINT_ID"
 ```
 
 Compatibility aliases are:
@@ -78,8 +84,10 @@ Compatibility aliases are:
 - `agent-audit-catalog`
 - `agent-audit-catalog-checkpoint`
 - `agent-audit-catalog-consistency`
+- `agent-audit-bundle`
+- `agent-audit-admission`
 
-The wheel has no runtime dependencies and contains only the fifteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, inclusion/consistency proofs, reports, tests, integrations, and generated evidence never enter the wheel.
+The wheel has no runtime dependencies and contains only the seventeen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, archives, catalogs, checkpoints, proofs, bundles, admission policies, admission decisions, reports, tests, integrations, and generated evidence never enter the wheel.
 
 Installed-wheel `doctor` and integration `run` fail closed because external integrations remain source-checkout-only.
 
@@ -111,17 +119,13 @@ python agent_system.py audit \
   --format json
 ```
 
-The verifier rejects malformed UTF-8/JSON, duplicate keys, partial records, schema drift, invalid timestamps, malformed hashes, previous-hash breaks, noncanonical serialization, symlinks, and stale external pins. Every append holds a sidecar advisory lock and verifies the complete chain first.
-
 A self-consistent file alone does not prove freshness. Retain the latest record count and head hash separately.
 
 See [docs/audit-log-integrity.md](docs/audit-log-integrity.md) and [docs/security-audit-log-integrity.md](docs/security-audit-log-integrity.md).
 
 ## Typed privacy-safe audit events
 
-Reserved events—`scan`, `scan-added-lines`, `baseline-create`, `guard`, `scrub`, and `dispatch`—use exact versioned schemas. Other lowercase hyphenated events use a bounded generic JSON schema.
-
-Paths, command arrays, and Git refs are stored as domain-separated SHA-256 references rather than raw values. Credential-bearing generic fields and credential-shaped free-form values are rejected.
+Reserved events use exact versioned schemas. Other lowercase hyphenated events use a bounded generic JSON schema. Paths, command arrays, and Git refs are stored as domain-separated SHA-256 references rather than raw values.
 
 ```bash
 python agent_system.py audit-events --format json
@@ -130,7 +134,7 @@ python agent_system.py audit --path .agent-system/audit.jsonl --require-typed --
 
 See [docs/audit-event-admission.md](docs/audit-event-admission.md) and [docs/security-audit-event-admission.md](docs/security-audit-event-admission.md).
 
-## Audit segment rotation
+## Audit segment rotation and catalogs
 
 ```bash
 basit-agent-segments rotate \
@@ -140,25 +144,7 @@ basit-agent-segments rotate \
   --expected-head "$EXPECTED_HEAD" \
   --format json
 
-basit-agent-segments verify \
-  audit-archive/0001 audit-archive/0002 \
-  --active .agent-system/audit.jsonl \
-  --expected-latest-segment-id "$LATEST_SEGMENT_ID" \
-  --format json
-```
-
-Every archive contains exact `segment.jsonl` bytes and a canonical `manifest.json`. The archive verifies before the active log is atomically replaced with one typed continuity record. Existing directories are never overwritten.
-
-See [docs/audit-segment-rotation.md](docs/audit-segment-rotation.md) and [docs/security-audit-segment-rotation.md](docs/security-audit-segment-rotation.md).
-
-## Audit segment catalogs
-
-```bash
 basit-agent-catalog init audit-archive/catalog.json \
-  --active .agent-system/audit.jsonl --format json
-
-agent-audit-catalog verify audit-archive/catalog.json \
-  --expected-catalog-id "$CATALOG_ID" \
   --active .agent-system/audit.jsonl --format json
 
 basit-agent-catalog sync audit-archive/catalog.json \
@@ -166,13 +152,11 @@ basit-agent-catalog sync audit-archive/catalog.json \
   --active .agent-system/audit.jsonl --format json
 ```
 
-Synchronization accepts only an exact right-descendant extension of the pinned catalog. Missing, renamed, replaced, reordered, extra, or forked segments fail closed. A verified no-op does not rewrite catalog bytes.
+Every archive contains exact `segment.jsonl` bytes and a canonical `manifest.json`. Catalog synchronization accepts only an exact right-descendant extension of the externally pinned catalog.
 
-See [docs/audit-segment-catalog.md](docs/audit-segment-catalog.md) and [docs/security-audit-segment-catalog.md](docs/security-audit-segment-catalog.md).
+See [docs/audit-segment-rotation.md](docs/audit-segment-rotation.md), [docs/audit-segment-catalog.md](docs/audit-segment-catalog.md), and their security audits.
 
-## Portable audit catalog checkpoints
-
-A checkpoint commits one exact pinned catalog generation to an RFC 6962-style Merkle root. A compact proof demonstrates membership of one complete segment entry without distributing the full catalog.
+## Portable catalog checkpoints and proofs
 
 ```bash
 basit-agent-catalog-checkpoint create \
@@ -196,7 +180,7 @@ See [docs/audit-catalog-checkpoints.md](docs/audit-catalog-checkpoints.md) and [
 
 ## Audit catalog consistency proofs
 
-A consistency proof shows that a candidate checkpoint retains every segment entry committed by a retained checkpoint. Full catalogs and segment archives are needed during proof creation, but proof verification needs only the compact proof, two checkpoints, and four externally retained IDs.
+A compact consistency proof shows that a candidate checkpoint retains every segment entry committed by a retained checkpoint.
 
 ```bash
 basit-agent-catalog-consistency prove \
@@ -206,23 +190,72 @@ basit-agent-catalog-consistency prove \
   --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
   --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
   --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
-  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
-  --candidate-active candidate/active.jsonl --format json
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
 
 agent-audit-catalog-consistency verify \
   catalog-consistency.json retained-checkpoint.json candidate-checkpoint.json \
   --expected-previous-catalog-id "$RETAINED_CATALOG_ID" \
   --expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
   --expected-candidate-catalog-id "$CANDIDATE_CATALOG_ID" \
-  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+  --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID"
+```
+
+Stable denials are `AUK009` rollback, `AUK010` fork/predecessor mismatch, and `AUK011` generation regression.
+
+See [docs/audit-catalog-consistency.md](docs/audit-catalog-consistency.md) and [docs/security-audit-catalog-consistency.md](docs/security-audit-catalog-consistency.md).
+
+## Portable audit evidence bundles
+
+A snapshot bundle packages a pinned candidate checkpoint and one or more inclusion proofs. A transition bundle also packages a pinned previous checkpoint and a consistency proof. Selected sealed segments may be included after independent proof-to-directory verification.
+
+```bash
+basit-agent-audit-bundle create audit-handoff \
+  --checkpoint candidate-checkpoint.json \
+  --expected-checkpoint-id "$CHECKPOINT_ID" \
+  --proof segment-proof.json \
+  --segment-root audit-archive
+
+agent-audit-bundle verify audit-handoff \
+  --expected-bundle-id "$BUNDLE_ID" \
+  --expected-checkpoint-id "$CHECKPOINT_ID"
+```
+
+Transition creation additionally accepts:
+
+```bash
+--previous-checkpoint retained-checkpoint.json \
+--expected-previous-checkpoint-id "$RETAINED_CHECKPOINT_ID" \
+--consistency-proof catalog-consistency.json
+```
+
+See [docs/audit-evidence-bundles.md](docs/audit-evidence-bundles.md) and [docs/security-audit-evidence-bundles.md](docs/security-audit-evidence-bundles.md).
+
+## Consumer audit bundle admission
+
+Bundle verification proves integrity; admission determines whether that verified evidence satisfies consumer policy. The policy must remain outside the bundle.
+
+```bash
+basit-agent-audit-admission init audit-admission.json
+agent-audit-admission validate audit-admission.json --format json
+
+basit-agent-audit-admission evaluate audit-handoff \
+  --policy audit-admission.json \
+  --expected-bundle-id "$BUNDLE_ID" \
+  --expected-candidate-checkpoint-id "$CHECKPOINT_ID" \
   --format json
 ```
 
-A direct next generation must retain the previous catalog ID. A larger generation gap proves append-only segment continuity but does not authenticate omitted intermediate checkpoints. Stable denials are `AUK009` rollback, `AUK010` fork/predecessor mismatch, and `AUK011` generation regression.
+Transition evaluation also requires `--expected-previous-checkpoint-id`.
 
-These unsigned proofs establish integrity and append-only continuity, not producer identity, witness consensus, or public transparency-log publication.
+Exit codes:
 
-See [docs/audit-catalog-consistency.md](docs/audit-catalog-consistency.md) and [docs/security-audit-catalog-consistency.md](docs/security-audit-catalog-consistency.md).
+- `0`: fully verified and admitted
+- `1`: fully verified but denied by policy
+- `2`: malformed policy, unsafe input, stale pin, or unverifiable bundle
+
+The decision includes a canonical policy SHA-256, deterministic decision ID, evidence counts, selected segment identities, and stable `AUA001`–`AUA016` diagnostics. These values are unsigned integrity commitments, not authenticated identities or signatures.
+
+See [docs/audit-bundle-admission.md](docs/audit-bundle-admission.md) and [docs/security-audit-bundle-admission.md](docs/security-audit-bundle-admission.md).
 
 ## Pull-request change gates
 
@@ -258,76 +291,3 @@ jobs:
 ```
 
 Supported modes are `full`, `changed-files`, and `added-lines`. Generated JSON/SARIF remains under `.agent-system/`, and annotations omit scanner preview evidence.
-
-See [docs/github-action.md](docs/github-action.md).
-
-## Baselines, configuration, and suppressions
-
-```bash
-python agent_system.py config --init
-python agent_system.py policy --init
-python agent_system.py baseline --create --scan-path .
-python agent_system.py scan . --new-only --format json --fail-on high
-```
-
-The mandatory `core` pack and rules `BAS000` through `BAS003` cannot be disabled. Suppressions require an owner, meaningful reason, and expiration. Baselines omit source previews and are bound to active controls.
-
-## Reproducible releases and evidence
-
-```bash
-export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
-python -m pip wheel . --no-deps --wheel-dir dist-one
-python -m pip wheel . --no-deps --wheel-dir dist-two
-python scripts/release_bundle.py compare dist-one/*.whl dist-two/*.whl
-python scripts/release_bundle.py create \
-  --wheel dist-one/*.whl --output-dir release \
-  --source-commit "$(git rev-parse HEAD)" \
-  --source-date-epoch "$SOURCE_DATE_EPOCH"
-python scripts/release_bundle.py verify release
-```
-
-Each bundle contains the wheel, SPDX 2.3 SBOM, unsigned in-toto/SLSA provenance, canonical manifest, and checksums. Verification regenerates expected evidence from the wheel.
-
-## Admission, transitions, and retained trust
-
-```bash
-python scripts/release_admission.py evaluate release \
-  --policy .release-admission.example.json \
-  --expected-source-commit "$(git rev-parse HEAD)" \
-  --expected-version "0.1.0"
-
-python scripts/release_transition.py gate trusted-release candidate-release \
-  --policy .release-transition.example.json \
-  --expected-previous-release-id "$TRUSTED_RELEASE_ID" \
-  --expected-candidate-source-commit "$CANDIDATE_COMMIT" \
-  --expected-candidate-version "$CANDIDATE_VERSION"
-```
-
-Accepted transitions can be retained in a pinned hash-chained trust state, summarized by Merkle checkpoints, proved per release, and compared using compact consistency proofs.
-
-## Safe dispatch
-
-```bash
-python agent_system.py run workflow-warden
-python agent_system.py run workflow-warden --approve
-```
-
-Integration execution is shown first and does nothing until `--approve` is supplied. Publishing is never the default.
-
-## Validation
-
-```bash
-python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_audit_consistency.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
-python -m unittest discover -s tests -p "test_audit_catalog_consistency.py" -v
-python agent_system.py scan . --format json --fail-on high
-python agent_system.py guard python -m unittest discover -s tests
-```
-
-## Numbered development workflow
-
-Development is tracked as an ordered 1-to-400 sequence. Every number preserves working features, adds tests and documentation, verifies CI, and updates [development-progress.json](development-progress.json). See [docs/NUMBERED_WORKFLOW.md](docs/NUMBERED_WORKFLOW.md).
-
-## License boundary
-
-`Dicklesworthstone/destructive_command_guard` is not copied, fetched, indexed, vendored, or included because its current license contains an OpenAI/Anthropic restriction. The command gate here is an independent implementation based on general safety requirements and the user's own projects.

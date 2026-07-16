@@ -57,8 +57,12 @@ All notable public distribution changes are recorded here.
 - proof-only offline verification after removal of source catalogs, proof files, and segment archives
 - optional sealed-segment copying with proof-to-directory verification before creation and independent re-verification after transfer
 - stable `AUB001` through `AUB012` diagnostics for unsafe paths, invalid composition, stale pins, duplicate evidence, checksum drift, extra files, and overwrite attempts
-- two installed audit-bundle aliases, a reviewed sixteen-module/fourteen-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, admission, transition, trust-state, release-checkpoint, release-consistency, audit-integrity, event-admission, segment, catalog, catalog-checkpoint, catalog-consistency, and audit-bundle artifacts with no publication, signing key, OIDC request, or registry credentials
+- consumer-owned audit bundle admission policies that verify the complete bundle before applying authorization controls
+- exact bundle-type, size, proof-count, sealed-evidence, candidate-generation, segment-selection, consistency-relation, predecessor, and generation-delta constraints
+- canonical policy SHA-256, deterministic decision IDs, and stable `AUA001` through `AUA016` denials
+- separate admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) audit-bundle outcomes
+- installed audit-bundle and admission aliases, a reviewed seventeen-module/sixteen-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
