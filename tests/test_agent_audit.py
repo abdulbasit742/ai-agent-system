@@ -55,8 +55,8 @@ class AuditLogTests(unittest.TestCase):
     def test_append_creates_versioned_sequence_chain(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "audit.jsonl"
-            first = append_audit(path, "scan", {"active": 0}, timestamp=TIMESTAMP)
-            second = append_audit(path, "guard", {"allowed": True}, timestamp=TIMESTAMP)
+            first = append_audit(path, "custom-alpha", {"active": 0}, timestamp=TIMESTAMP)
+            second = append_audit(path, "custom-beta", {"allowed": True}, timestamp=TIMESTAMP)
             report = inspect_audit(path)
         self.assertEqual(1, first["sequence"])
         self.assertEqual(2, second["sequence"])
