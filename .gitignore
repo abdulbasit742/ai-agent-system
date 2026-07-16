@@ -18,6 +18,10 @@ dist-trust-candidate/
 release-trust-candidate/
 release-trust-state.json
 release-trust-state.json.lock
+dist-checkpoint-anchor/
+release-checkpoint-anchor/
+release-checkpoint.json
+release-inclusion-proof.json
 .env
 .env.*
 !.env.example
