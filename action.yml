@@ -4,7 +4,7 @@ author: Abdul Basit
 
 inputs:
   mode:
-    description: Scan mode: full, changed-files, or added-lines.
+    description: "Scan mode: full, changed-files, or added-lines."
     required: false
     default: added-lines
   path:
