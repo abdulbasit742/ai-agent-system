@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 17,
-    "next_expected": 18
+    "latest_completed": 18,
+    "next_expected": 19
   },
   "completed": [
     {
@@ -125,6 +125,13 @@
       "status": "completed",
       "summary": "Added canonical catalogs that auto-discover sealed segment directories, bind exact archive evidence, require externally pinned catalog IDs, track predecessor-linked generations, detect incomplete histories, and synchronize only right-descendant segments.",
       "verification": {"unit_tests": 284, "python_versions": ["3.11", "3.12"], "compileall": "passed", "unordered_segment_discovery": "passed", "canonical_catalog_id_and_predecessor_lineage": "passed", "exact_catalog_to_segment_binding": "passed", "complete_discovery_and_stale_catalog_detection": "passed", "pinned_right_descendant_sync": "passed", "fork_active_mismatch_and_stale_pin_rejection": "passed", "installed_catalog_cli": "passed", "read_only_catalog_ci": "passed", "thirteen_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 18,
+      "title": "Portable audit catalog Merkle checkpoints",
+      "status": "completed",
+      "summary": "Added canonical Merkle checkpoints for pinned audit catalogs, compact per-segment inclusion proofs, proof-only verification, optional sealed-segment binding, immutable artifacts, and stable AUP diagnostics.",
+      "verification": {"unit_tests": 304, "python_versions": ["3.11", "3.12"], "compileall": "passed", "canonical_checkpoint_and_merkle_root": "passed", "external_checkpoint_id_pin": "passed", "portable_segment_inclusion_proofs": "passed", "proof_only_verification": "passed", "sealed_segment_evidence_binding": "passed", "rehashed_audit_path_tamper_rejection": "passed", "installed_checkpoint_cli": "passed", "read_only_checkpoint_ci": "passed", "fourteen_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
