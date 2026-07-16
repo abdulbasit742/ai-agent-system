@@ -47,7 +47,11 @@
 - Merkle leaves and nodes must retain separate `0x00` and `0x01` domains and RFC 6962 largest-power-of-two splitting; never duplicate odd leaves or silently change tree construction.
 - Checkpoint and proof outputs must be immutable, symlink-safe, canonical, and atomic no-overwrite creations. Rehashed proof changes must still reconstruct the pinned root.
 - Trust-state lineage gates must accept only identical or right-descendant histories and retain stable `CHK010` rollback and `CHK011` fork denials; never merge forks automatically.
-- Ordinary CI may build, verify, admit, compare, exercise temporary trust states and checkpoints, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Compact consistency proofs must reconstruct both pinned checkpoint roots from canonical maximal aligned power-of-two ranges; a matching `consistency_id` alone is insufficient.
+- Consistency-proof creation may accept only identical or right-descendant histories. Rollback and fork requests must retain stable `CNS010` and `CNS011` denials and must not create proof files.
+- Previous and candidate checkpoint IDs must be externally pinned for consistency verification; proof files do not authenticate checkpoint producers.
+- Consistency proof outputs must remain immutable, canonical, symlink-safe, atomic no-overwrite files and must exclude trust entries, source contents, credentials, and transition-policy details.
+- Ordinary CI may build, verify, admit, compare, exercise temporary trust states, checkpoints, and consistency proofs, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
@@ -69,6 +73,7 @@ python -m unittest discover -s tests -p "test_release_admission.py" -v
 python -m unittest discover -s tests -p "test_release_transition.py" -v
 python -m unittest discover -s tests -p "test_release_trust.py" -v
 python -m unittest discover -s tests -p "test_release_checkpoint.py" -v
+python -m unittest discover -s tests -p "test_release_consistency.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
