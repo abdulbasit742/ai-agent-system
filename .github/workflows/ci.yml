@@ -45,7 +45,11 @@ jobs:
         run: python -m unittest discover -s tests -p "test_github_action.py" -v
       - name: Test GitHub Action output boundary
         run: python -m unittest discover -s tests -p "test_action_entrypoint.py" -v
-      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
+      - name: Test Python package metadata and CLI
+        run: python -m unittest discover -s tests -p "test_packaging.py" -v
+      - name: Test wheel archive validator
+        run: python -m unittest discover -s tests -p "test_wheel_validator.py" -v
+      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
       - run: python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
@@ -85,3 +89,59 @@ jobs:
           assert sarif['version'] == '2.1.0'
           assert sarif['runs'][0]['results'] == []
           PY
+
+  package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build dependency-free wheel
+        run: python -m pip wheel . --no-deps --wheel-dir dist
+      - name: Validate wheel contents
+        run: python scripts/validate_wheel.py dist/*.whl
+      - name: Install wheel in isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/basit-agent-venv"
+          "$RUNNER_TEMP/basit-agent-venv/bin/python" -m pip install --no-deps dist/*.whl
+      - name: Validate installed console commands
+        env:
+          EXPECTED_VERSION: "0.1.0"
+        run: |
+          BIN="$RUNNER_TEMP/basit-agent-venv/bin"
+          EXPECTED="basit-agent-system $EXPECTED_VERSION"
+          test "$("$BIN/basit-agent" --version)" = "$EXPECTED"
+          test "$("$BIN/basit-agent-lines" --version)" = "$EXPECTED"
+          test "$("$BIN/agent-system" --version)" = "$EXPECTED"
+          test "$("$BIN/agent-changed-lines" --version)" = "$EXPECTED"
+
+          mkdir -p "$RUNNER_TEMP/package-run"
+          cd "$RUNNER_TEMP/package-run"
+          "$BIN/basit-agent" \
+            --audit-log "$RUNNER_TEMP/package-audit.jsonl" \
+            scan "$GITHUB_WORKSPACE" \
+            --format json \
+            --fail-on high \
+            --output "$RUNNER_TEMP/package-scan.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ['RUNNER_TEMP'], 'package-scan.json').read_text())
+          assert report['findings'] == []
+          assert report['summary']['active'] == 0
+          PY
+
+          set +e
+          "$BIN/basit-agent" doctor >"$RUNNER_TEMP/package-doctor.txt" 2>&1
+          STATUS=$?
+          set -e
+          test "$STATUS" -eq 2
+          grep -q "requires a source checkout" "$RUNNER_TEMP/package-doctor.txt"
