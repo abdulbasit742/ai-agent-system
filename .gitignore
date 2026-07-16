@@ -22,6 +22,7 @@ dist-checkpoint-anchor/
 release-checkpoint-anchor/
 release-checkpoint.json
 release-inclusion-proof.json
+release-consistency-proof.json
 .env
 .env.*
 !.env.example
