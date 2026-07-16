@@ -73,8 +73,11 @@ All notable public distribution changes are recorded here.
 - authenticated first-appended transition entries binding retained head hash, checkpoint, catalog, and generation continuity
 - stable `ATK009` rollback, `ATK010` fork, and `ATK011` invalid-boundary denials that never create proof artifacts
 - proof-only consistency verification after removal of both complete trust states
-- installed audit-bundle, admission, trust, trust-checkpoint, and trust-consistency aliases, a reviewed twenty-module/twenty-two-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable snapshot and transition audit trust handoff bundles with exact manifests, sorted checksums, external bundle/checkpoint pins, and mandatory candidate-head proofs
+- offline handoff verification after removal of complete trust states and all loose checkpoint/proof inputs
+- stable `ATB001` through `ATB012` diagnostics for unsafe paths, stale pins, invalid composition, substitution, boundary drift, and overwrite attempts
+- installed audit-bundle, admission, trust, trust-checkpoint, trust-consistency, and trust-handoff aliases, a reviewed twenty-two-module/twenty-four-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, audit integrity/event/segment/catalog/checkpoint/consistency/bundle/admission/trust/trust-checkpoint/trust-consistency/trust-handoff, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
