@@ -126,3 +126,54 @@ jobs:
           name: basit-agent-system-audit-catalog-${{ github.sha }}
           path: ${{ runner.temp }}/audit-catalog/
           if-no-files-found: error
+
+  catalog-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise catalog aliases outside source checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/catalog-venv"
+          BIN="$RUNNER_TEMP/catalog-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-catalog"
+          ARCHIVE="$ROOT/segments"
+          ACTIVE="$ROOT/active.jsonl"
+          CATALOG="$ARCHIVE/catalog.json"
+          mkdir -p "$ARCHIVE" "$ROOT/run"
+          cd "$ROOT/run"
+
+          "$BIN/basit-agent" --audit-log "$ACTIVE" scan "$GITHUB_WORKSPACE" \
+            --format json --fail-on high --output "$ROOT/scan.json"
+          "$BIN/basit-agent-segments" rotate --path "$ACTIVE" \
+            --output-dir "$ARCHIVE/0001" --format json > "$ROOT/rotate.json"
+          "$BIN/basit-agent-catalog" init "$CATALOG" --active "$ACTIVE" \
+            --format json > "$ROOT/catalog.json"
+          CATALOG_ID=$("$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["catalog_id"])' "$ROOT/catalog.json")
+          "$BIN/agent-audit-catalog" verify "$CATALOG" \
+            --expected-catalog-id "$CATALOG_ID" --active "$ACTIVE" --format json \
+            > "$ROOT/verify.json"
+
+          "$BIN/python" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'installed-catalog'
+          report = json.loads((root / 'verify.json').read_text())
+          assert report['valid'] is True
+          assert report['segment_count'] == 1
+          assert report['generation'] == 1
+          assert report['active']['privacy_safe'] is True
+          PY
