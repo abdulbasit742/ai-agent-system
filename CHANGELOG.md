@@ -105,7 +105,10 @@ All notable public distribution changes are recorded here.
 - compact append-only acceptance consistency proofs with independent root reconstruction and authenticated receiver/trust transition boundaries
 - portable snapshot and transition receiver-acceptance checkpoint bundles with exact manifests, checksums, external pins, mandatory candidate-head proofs, and offline verification
 - stable `ASC001` through `ASC011`, `ASR001` through `ASR011`, and `AAB001` through `AAB012` diagnostics for acceptance checkpoint, consistency, and bundle controls
-- installed audit, trust, receiver, receiver-acceptance, checkpoint, consistency, admission, and bundle aliases; a reviewed thirty-two-module/forty-four-command wheel; and synchronized release-admission boundaries
+- consumer-owned acceptance-bundle admission policies that fully verify bundles before applying acceptance/receiver/trust identity, proof-selection, and transition-delta controls
+- canonical acceptance admission policy hashes, deterministic decision IDs, policy-outside-bundle enforcement, manifest identity rechecks, and stable `ABA001` through `ABA016` denials
+- separate admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) acceptance-bundle outcomes
+- installed audit, trust, receiver, receiver-acceptance, checkpoint, consistency, admission, and bundle aliases; a reviewed thirty-three-module/forty-six-command wheel; and synchronized release-admission boundaries
 - read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, complete audit/trust/receiver/acceptance verification, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
