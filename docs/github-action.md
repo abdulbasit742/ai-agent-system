@@ -73,10 +73,10 @@ The baseline remains integrity-checked and bound to the active rule-pack and sup
 - `baseline`, `config`, `policy`: optional repository-relative control files
 - `annotations`: emit workflow annotations without matched source previews
 - `max-annotations`: integer from 0 to 50
-- `report-path`, `sarif-path`: repository-relative output files
+- `report-path`, `sarif-path`: distinct output files beneath `.agent-system/`
 - `python-version`: Python selected through `actions/setup-python`
 
-All paths are resolved beneath `GITHUB_WORKSPACE`. Absolute paths, parent traversal, control characters, missing control files, and output paths escaping through symlinks are rejected.
+Scan and control paths are resolved beneath `GITHUB_WORKSPACE`. Generated JSON and SARIF paths are more restrictive: they must remain beneath `.agent-system/`, must be different files, and may not escape that directory through symlinks. Absolute paths, parent traversal, control characters, and missing control files are rejected.
 
 ## Outputs
 
@@ -97,6 +97,6 @@ Uploading SARIF to GitHub code scanning is an optional caller decision because t
 
 - exit `0`: no finding meets `fail-on`
 - exit `1`: one or more reported findings meet `fail-on`
-- exit `2`: invalid input, unavailable Git history, malformed controls, unsafe path, or scanner execution/report error
+- exit `2`: invalid input, unavailable Git history, malformed controls, unsafe path, output collision, or scanner execution/report error
 
-Before each run, stale JSON and SARIF outputs are removed. A scanner error cannot be masked by an old successful report.
+Before each run, stale JSON and SARIF outputs are removed from the generated-output directory. A scanner error cannot be masked by an old successful report, and cleanup cannot target ordinary repository files.
