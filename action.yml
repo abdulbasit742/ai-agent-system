@@ -48,11 +48,11 @@ inputs:
     required: false
     default: "10"
   report-path:
-    description: Repository-relative JSON report path.
+    description: JSON report path beneath .agent-system/.
     required: false
     default: .agent-system/action-report.json
   sarif-path:
-    description: Repository-relative SARIF report path.
+    description: SARIF report path beneath .agent-system/.
     required: false
     default: .agent-system/action-results.sarif
   python-version:
@@ -112,7 +112,7 @@ runs:
         BASIT_SARIF_PATH: ${{ inputs['sarif-path'] }}
         BASIT_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         BASIT_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      run: python "$GITHUB_ACTION_PATH/scripts/github_action.py"
+      run: python "$GITHUB_ACTION_PATH/scripts/action_entrypoint.py"
 
 branding:
   icon: shield
