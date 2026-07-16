@@ -14,6 +14,7 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - versioned typed audit events with privacy-preserving path, command, and Git-ref references
 - atomic audit segment rotation with canonical sealed manifests and linked active logs
 - canonical segment catalogs with automatic archive discovery and pinned right-descendant synchronization
+- portable catalog Merkle checkpoints and per-segment inclusion proofs
 - reproducible release bundles with exact source identity and SHA-256 checksums
 - deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
 - consumer release-admission policies and verified release-transition rollback gates
@@ -53,7 +54,7 @@ Or install a local checkout:
 python -m pip install .
 ```
 
-Installed commands:
+Installed commands include:
 
 ```bash
 basit-agent --version
@@ -63,19 +64,19 @@ basit-agent audit --format json
 basit-agent audit-events --format json
 basit-agent-lines . --changed-from origin/main --format sarif
 basit-agent-segments rotate --path .agent-system/audit.jsonl --output-dir audit-archive/0001
-agent-audit-segments verify audit-archive/0001 --active .agent-system/audit.jsonl
 basit-agent-catalog init audit-archive/catalog.json --active .agent-system/audit.jsonl
-agent-audit-catalog verify audit-archive/catalog.json --expected-catalog-id "$CATALOG_ID"
+basit-agent-catalog-checkpoint create audit-archive/catalog.json checkpoint.json --expected-catalog-id "$CATALOG_ID"
 ```
 
-The compatibility aliases are:
+Compatibility aliases are:
 
 - `agent-system`
 - `agent-changed-lines`
 - `agent-audit-segments`
 - `agent-audit-catalog`
+- `agent-audit-catalog-checkpoint`
 
-The wheel has no runtime dependencies and contains only the thirteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, segment archives, catalog files, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
+The wheel has no runtime dependencies and contains only the fourteen reviewed modules enforced by `scripts/validate_wheel.py`. Runtime code is included; audit logs, segment archives, catalog files, checkpoint files, proof files, lock files, reports, tests, integrations, and generated evidence never enter the wheel.
 
 Installed-wheel `doctor` and integration `run` fail closed because external integrations remain source-checkout-only.
 
@@ -166,26 +167,16 @@ See [docs/audit-segment-rotation.md](docs/audit-segment-rotation.md) and [docs/s
 
 A catalog removes the need to manually order archive directories. It discovers every immediate sealed segment directory, verifies each manifest and data file, sorts by the committed segment index, and requires exact coverage of the archive root.
 
-Initialize after at least one rotation:
-
 ```bash
 basit-agent-catalog init audit-archive/catalog.json \
   --active .agent-system/audit.jsonl \
   --format json
-```
 
-Retain the returned `catalog_id`, then verify:
-
-```bash
 agent-audit-catalog verify audit-archive/catalog.json \
   --expected-catalog-id "$CATALOG_ID" \
   --active .agent-system/audit.jsonl \
   --format json
-```
 
-After additional rotations, synchronize explicitly:
-
-```bash
 basit-agent-catalog sync audit-archive/catalog.json \
   --expected-catalog-id "$CATALOG_ID" \
   --active .agent-system/audit.jsonl \
@@ -197,6 +188,49 @@ Synchronization accepts only an exact right-descendant extension of the pinned c
 Catalogs are unsigned integrity commitments. They do not authenticate an operator or merge forks automatically.
 
 See [docs/audit-segment-catalog.md](docs/audit-segment-catalog.md) and [docs/security-audit-segment-catalog.md](docs/security-audit-segment-catalog.md).
+
+## Portable audit catalog checkpoints
+
+A checkpoint commits one exact pinned catalog generation to an RFC 6962-style Merkle root. A compact proof demonstrates that one complete catalog segment entry belongs to that checkpoint without distributing the full catalog.
+
+Create and retain a checkpoint ID:
+
+```bash
+basit-agent-catalog-checkpoint create \
+  audit-archive/catalog.json \
+  audit-catalog-checkpoint.json \
+  --expected-catalog-id "$CATALOG_ID" \
+  --active .agent-system/audit.jsonl \
+  --format json
+```
+
+Create a proof by exact segment index or ID:
+
+```bash
+basit-agent-catalog-checkpoint prove \
+  audit-archive/catalog.json \
+  audit-catalog-checkpoint.json \
+  segment-proof.json \
+  --expected-catalog-id "$CATALOG_ID" \
+  --expected-checkpoint-id "$CHECKPOINT_ID" \
+  --segment-index 12 \
+  --format json
+```
+
+Verify membership without the complete catalog, and optionally rebind it to the actual sealed segment directory:
+
+```bash
+agent-audit-catalog-checkpoint verify-proof \
+  segment-proof.json \
+  audit-catalog-checkpoint.json \
+  --expected-checkpoint-id "$CHECKPOINT_ID" \
+  --segment-dir audit-archive/segment-0012 \
+  --format json
+```
+
+Leaves and nodes use distinct SHA-256 domains, odd leaves are never duplicated, and missing or extra audit-path hashes fail closed. Checkpoint and proof files are immutable no-overwrite evidence. Retain `checkpoint_id` separately: these unsigned hashes prove integrity and inclusion, not producer identity or freshness by themselves.
+
+See [docs/audit-catalog-checkpoints.md](docs/audit-catalog-checkpoints.md) and [docs/security-audit-catalog-checkpoints.md](docs/security-audit-catalog-checkpoints.md).
 
 ## Pull-request change gates
 
@@ -314,13 +348,14 @@ Integration execution is shown first and does nothing until `--approve` is suppl
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py audit-events --format json
 python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
 python -m unittest discover -s tests -p "test_audit_segments.py" -v
 python -m unittest discover -s tests -p "test_audit_catalog.py" -v
+python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```

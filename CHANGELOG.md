@@ -45,8 +45,12 @@ All notable public distribution changes are recorded here.
 - catalog generations linked by predecessor IDs with externally retained `catalog_id` freshness pins
 - exact discovery coverage and right-descendant-only synchronization that reject missing, renamed, replaced, unindexed, reordered, or forked segments
 - stable `AUC001` through `AUC010` diagnostics with distinct accepted, denied, and invalid exit semantics
-- two installed catalog commands, a reviewed thirteen-module/eight-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, audit-integrity, event-admission, segment, and catalog artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable audit catalog Merkle checkpoints that bind catalog identity, generation, predecessor, totals, latest segment, and RFC 6962 roots
+- compact per-segment inclusion proofs with proof-only verification and optional sealed-directory evidence binding
+- domain-separated leaf, node, checkpoint, and proof hashes with rehashed audit-path tamper rejection
+- stable `AUP001` through `AUP010` diagnostics and externally retained checkpoint freshness pins
+- two installed checkpoint commands, a reviewed fourteen-module/ten-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, admission, transition, trust-state, release-checkpoint, consistency, audit-integrity, event-admission, segment, catalog, and catalog-checkpoint artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 

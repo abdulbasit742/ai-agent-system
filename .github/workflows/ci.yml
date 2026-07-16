@@ -27,6 +27,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_audit_segments.py" -v
       - name: Test audit segment catalog
         run: python -m unittest discover -s tests -p "test_audit_catalog.py" -v
+      - name: Test audit catalog checkpoints and proofs
+        run: python -m unittest discover -s tests -p "test_audit_catalog_checkpoint.py" -v
       - name: Test suppression policies
         run: python -m unittest discover -s tests -p "test_agent_policy.py" -v
       - name: Test rule-pack configuration
@@ -67,7 +69,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_release_transition.py" -v
       - name: Test pinned release trust state
         run: python -m unittest discover -s tests -p "test_release_trust.py" -v
-      - run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+      - run: python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_audit_checkpoint.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
       - run: python agent_system.py audit-events --format json
@@ -144,6 +146,8 @@ jobs:
           "$BIN/agent-audit-segments" --help >/dev/null
           "$BIN/basit-agent-catalog" --help >/dev/null
           "$BIN/agent-audit-catalog" --help >/dev/null
+          "$BIN/basit-agent-catalog-checkpoint" --help >/dev/null
+          "$BIN/agent-audit-catalog-checkpoint" --help >/dev/null
 
           mkdir -p "$RUNNER_TEMP/package-run"
           cd "$RUNNER_TEMP/package-run"
