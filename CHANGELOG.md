@@ -53,8 +53,12 @@ All notable public distribution changes are recorded here.
 - direct predecessor binding, multi-generation append-only continuity, and logarithmic proof size
 - stable `AUK009` rollback, `AUK010` fork/predecessor, and `AUK011` generation-regression denials
 - rehashed frontier, noncanonical layout, stale pin, unsafe output, and checkpoint-substitution rejection
-- installed consistency aliases, a reviewed fifteen-module/twelve-command wheel, and synchronized release-admission boundaries
-- read-only CI release-readiness, admission, transition, trust-state, release-checkpoint, release-consistency, audit-integrity, event-admission, segment, catalog, catalog-checkpoint, and catalog-consistency artifacts with no publication, signing key, OIDC request, or registry credentials
+- portable snapshot and transition audit evidence bundles with canonical manifests, exact file roles, SHA-256 checksums, and domain-separated bundle IDs
+- proof-only offline verification after removal of source catalogs, proof files, and segment archives
+- optional sealed-segment copying with proof-to-directory verification before creation and independent re-verification after transfer
+- stable `AUB001` through `AUB012` diagnostics for unsafe paths, invalid composition, stale pins, duplicate evidence, checksum drift, extra files, and overwrite attempts
+- two installed audit-bundle aliases, a reviewed sixteen-module/fourteen-command wheel, and synchronized release-admission boundaries
+- read-only CI release-readiness, admission, transition, trust-state, release-checkpoint, release-consistency, audit-integrity, event-admission, segment, catalog, catalog-checkpoint, catalog-consistency, and audit-bundle artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
