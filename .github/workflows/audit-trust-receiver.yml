@@ -93,13 +93,13 @@ jobs:
             --expected-state-id "$UPDATED" \
             --expected-bundle-id "$TRANSITION_BUNDLE" \
             --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
-            --format json > "$ROOT/replay.json"
+            --format json > "$ROOT/replay.json" 2> "$ROOT/replay-error.json"
           REPLAY=$?
           python agent_audit_trust_receiver.py verify "$ROOT/receiver.json" \
-            --expected-state-id "$STATE" --format json > "$ROOT/stale.json"
+            --expected-state-id "$STATE" --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
           STALE=$?
           set -e
-          test "$REPLAY" -eq 1
+          test "$REPLAY" -eq 2
           test "$STALE" -eq 1
           cmp "$ROOT/before-denial.json" "$ROOT/receiver.json"
           python agent_audit_trust_receiver.py verify "$ROOT/receiver.json" \
