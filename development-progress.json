@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 23,
-    "next_expected": 24
+    "latest_completed": 24,
+    "next_expected": 25
   },
   "history": [
     {
@@ -36,6 +36,30 @@
         "installed_trust_checkpoint_cli": "passed",
         "read_only_trust_checkpoint_ci": "passed",
         "nineteen_module_dependency_free_wheel": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 24,
+      "title": "Compact audit trust consistency proofs",
+      "status": "completed",
+      "summary": "Added compact append-only consistency proofs between pinned audit trust checkpoints with independent root reconstruction, authenticated first-transition boundaries, proof-only verification, immutable evidence, and rollback/fork denials.",
+      "verification": {
+        "unit_tests": 424,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "canonical_compact_range_layout": "passed",
+        "previous_and_candidate_root_reconstruction": "passed",
+        "proof_only_checkpoint_verification": "passed",
+        "authenticated_transition_boundary": "passed",
+        "logarithmic_frontier_size": "passed",
+        "rollback_and_fork_denials": "passed",
+        "rehashed_frontier_layout_boundary_tamper_rejection": "passed",
+        "immutable_atomic_outputs": "passed",
+        "installed_trust_consistency_cli": "passed",
+        "read_only_trust_consistency_ci": "passed",
+        "twenty_module_dependency_free_wheel": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
