@@ -1,0 +1,50 @@
+{
+  "bundle": {
+    "allowed_types": [
+      "snapshot",
+      "transition"
+    ],
+    "max_bytes": 67108864,
+    "max_files": 260,
+    "max_proofs": 128,
+    "min_proofs": 1
+  },
+  "candidate": {
+    "allowed_head_handoff_ids": [],
+    "allowed_receiver_checkpoint_ids": [],
+    "allowed_receiver_state_ids": [],
+    "allowed_trust_checkpoint_ids": [],
+    "allowed_trust_state_ids": [],
+    "max_generation": 1000000,
+    "max_receiver_entries": 1000000,
+    "max_segment_count": 1000000,
+    "max_trust_entries": 1000000,
+    "min_generation": 1,
+    "min_receiver_entries": 1,
+    "min_segment_count": 1,
+    "min_trust_entries": 1
+  },
+  "selection": {
+    "allowed_handoff_ids": [],
+    "allowed_sequences": [],
+    "require_anchor": false,
+    "require_head": true,
+    "required_handoff_ids": [],
+    "required_sequences": []
+  },
+  "transition": {
+    "allowed_previous_receiver_checkpoint_ids": [],
+    "allowed_previous_receiver_state_ids": [],
+    "allowed_relations": [
+      "right-descendant"
+    ],
+    "max_generation_delta": 1000000,
+    "max_receiver_entry_delta": 1000000,
+    "max_trust_entry_delta": 1000000,
+    "min_generation_delta": 1,
+    "min_receiver_entry_delta": 1,
+    "min_trust_entry_delta": 1,
+    "require_single_step": false
+  },
+  "version": 1
+}
