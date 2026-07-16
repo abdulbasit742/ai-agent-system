@@ -9,7 +9,7 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 3. Preserve all working features and repository safety boundaries.
 4. Implement one coherent vertical slice rather than disconnected files.
 5. Add or update regression tests and documentation.
-6. Run unit tests, compilation, configuration validation, policy validation, baseline validation, Git scope validation, action validation, package validation, release-evidence validation, self-scan, and command-guard checks.
+6. Run unit tests, compilation, configuration validation, policy validation, baseline validation, Git scope validation, action validation, package validation, release-evidence validation, supply-chain evidence validation, self-scan, and command-guard checks.
 7. Commit only after verification succeeds.
 8. Update `development-progress.json` with the completed number, outcome, files, and verification evidence.
 9. Continue sequentially; do not skip or silently redo a number.
@@ -23,3 +23,4 @@ Each user-provided number triggers one autonomous, reviewable repository improve
 - Task 5 introduced a first-party, read-only GitHub Action with preview-free annotations, JSON/SARIF artifacts, immutable pull-request refs, workspace path containment, and composite-action CI validation.
 - Task 6 introduced an installable dependency-free Python wheel with canonical versioning, reviewed console entry points, exact archive validation, isolated installation tests, and a fail-closed source-only integration boundary.
 - Task 7 introduced deterministic release-evidence bundles with byte-for-byte wheel comparison, exact source identity, canonical manifests, SHA-256 checksums, tamper detection, and a read-only non-publishing CI gate.
+- Task 8 introduced deterministic SPDX 2.3 SBOMs and unsigned in-toto/SLSA-style provenance that are manifest-bound, checksum-covered, and semantically regenerated from each bundled wheel during verification.
