@@ -12,6 +12,7 @@ A dependency-free AI-agent control plane for repository scanning, command guardi
 - installable dependency-free Python package with reviewed wheel contents
 - strict canonical audit chains with external freshness pins and safe recovery copies
 - versioned typed audit events with privacy-preserving path, command, and Git-ref references
+- atomic audit segment rotation with canonical manifests, active-log continuity, and rollback pins
 - reproducible release bundles with exact source identity and SHA-256 checksums
 - deterministic SPDX SBOMs and source-bound in-toto/SLSA-style provenance
 - consumer release-admission policies and verified release-transition rollback gates
@@ -61,9 +62,11 @@ basit-agent guard git reset --hard HEAD~1
 basit-agent audit --format json
 basit-agent audit-events --format json
 basit-agent-lines . --changed-from origin/main --format sarif
+basit-agent-segments rotate --path .agent-system/audit.jsonl --output-dir .agent-system/segments/0001
+agent-audit-segments verify .agent-system/segments/0001 --active .agent-system/audit.jsonl
 ```
 
-Compatibility aliases `agent-system` and `agent-changed-lines` are also installed. The wheel has no runtime dependencies and contains only the eleven reviewed modules enforced by `scripts/validate_wheel.py`. Audit runtime code is included, but audit data, lock files, reports, baselines, tests, integrations, and generated evidence never enter the wheel.
+Compatibility aliases `agent-system` and `agent-changed-lines` are also installed. The wheel has no runtime dependencies and contains only the twelve reviewed modules enforced by `scripts/validate_wheel.py`. Audit and segment runtime code is included, but audit data, segment archives, lock files, reports, baselines, tests, integrations, and generated evidence never enter the wheel.
 
 External integrations are not vendored. Installed-wheel calls to `doctor` or integration `run` fail closed and require a source checkout.
 
@@ -141,6 +144,36 @@ python agent_system.py audit \
 Stable event-admission rules are `AUD022` for typed schema/canonicalization failure, `AUD023` for credential-bearing details, and `AUD024` when typed-only policy encounters earlier untyped records.
 
 See [docs/audit-event-admission.md](docs/audit-event-admission.md) and [docs/security-audit-event-admission.md](docs/security-audit-event-admission.md).
+
+## Audit segment rotation
+
+Seal a verified, fully typed active log before it reaches the reviewed 64 MiB boundary:
+
+```bash
+basit-agent-segments rotate \
+  --path .agent-system/audit.jsonl \
+  --output-dir .agent-system/segments/0001 \
+  --expected-records "$EXPECTED_RECORDS" \
+  --expected-head "$EXPECTED_HEAD" \
+  --format json
+```
+
+Verify complete archived history plus the current active log:
+
+```bash
+basit-agent-segments verify \
+  .agent-system/segments/0001 \
+  .agent-system/segments/0002 \
+  --active .agent-system/audit.jsonl \
+  --expected-latest-segment-id "$LATEST_SEGMENT_ID" \
+  --format json
+```
+
+Each new archive directory contains an exact `segment.jsonl` and canonical `manifest.json`. The archive is independently verified and committed before the active log is atomically replaced with one typed continuity record. Existing directories are never overwritten.
+
+Segment hashes and manifests detect modification but are unsigned. Retain the latest segment ID outside the audit storage for rollback detection, and keep every sealed segment available for complete-chain verification.
+
+See [docs/audit-segment-rotation.md](docs/audit-segment-rotation.md) and [docs/security-audit-segment-rotation.md](docs/security-audit-segment-rotation.md).
 
 ## Pull-request change gates
 
@@ -290,13 +323,14 @@ The root dispatcher does not publish by default.
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_audit_events.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py audit-events --format json
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py audit --format json
 python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
+python -m unittest discover -s tests -p "test_audit_segments.py" -v
 python agent_system.py guard python -m unittest discover -s tests
 ```
 
