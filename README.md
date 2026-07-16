@@ -10,6 +10,7 @@ A dependency-free AI agent control plane for repository scanning, command guardi
 - Git-aware changed-file pull-request gates
 - added-line-only regression gates for low-noise reviews
 - first-party GitHub Action with annotations, job summaries, JSON, SARIF, and structured outputs
+- installable dependency-free Python package with reviewed wheel contents and console commands
 - destructive-command policy gate
 - credential, PII, and prompt-marker redaction
 - text, JSON, and SARIF reports
@@ -32,6 +33,40 @@ The root CLI works without downloading integrations. Optional pinned integration
 ```bash
 python scripts/bootstrap_integrations.py
 ```
+
+## Python package
+
+Install from a reviewed immutable commit:
+
+```bash
+pipx install git+https://github.com/abdulbasit742/ai-agent-system.git@<reviewed-commit-sha>
+```
+
+Or install a local checkout:
+
+```bash
+python -m pip install .
+```
+
+Installed commands:
+
+```bash
+basit-agent --version
+basit-agent scan . --format json --fail-on high
+basit-agent guard git reset --hard HEAD~1
+basit-agent-lines . --changed-from origin/main --format sarif
+```
+
+Compatibility aliases `agent-system` and `agent-changed-lines` are also installed. The wheel has no runtime dependencies and contains only the eight reviewed control-plane modules. External integrations are not vendored; installed-wheel calls to `doctor` or integration `run` fail closed and require a source checkout.
+
+Build and inspect the wheel:
+
+```bash
+python -m pip wheel . --no-deps --wheel-dir dist
+python scripts/validate_wheel.py dist/*.whl
+```
+
+See [docs/python-distribution.md](docs/python-distribution.md), [docs/security-audit-python-distribution.md](docs/security-audit-python-distribution.md), and [CHANGELOG.md](CHANGELOG.md).
 
 ## GitHub Action
 
@@ -220,13 +255,16 @@ Development is tracked as an ordered 1-to-400 sequence. Every number must preser
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py tests scripts
+python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
 python agent_system.py --audit-log /tmp/agent-audit.jsonl scan . --new-only --baseline /tmp/agent-baseline.json --format json --fail-on high
 python agent_changed_lines.py . --changed-from HEAD --format json --audit-log /tmp/agent-line-audit.jsonl
 python -m unittest discover -s tests -p "test_github_action.py" -v
+python -m unittest discover -s tests -p "test_packaging.py" -v
+python -m pip wheel . --no-deps --wheel-dir dist
+python scripts/validate_wheel.py dist/*.whl
 python agent_system.py scan . --format json --fail-on high
 python agent_system.py guard python -m unittest discover -s tests
 ```
