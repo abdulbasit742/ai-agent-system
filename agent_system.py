@@ -8,15 +8,31 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import agent_audit as _audit
 import agent_system_legacy as _legacy
 from agent_audit import (
     AuditError,
     append_audit as _strict_append_audit,
-    inspect_audit,
+    inspect_audit as _strict_inspect_audit,
     recover_audit,
     verify_audit as _strict_verify_audit,
 )
 from agent_system_legacy import *  # noqa: F401,F403
+
+
+def inspect_audit(*args, **kwargs):
+    """Expose stable public AUD rules while preserving strict core validation."""
+    report = _strict_inspect_audit(*args, **kwargs)
+    error = report.get("error")
+    if (
+        error
+        and error.get("rule_id") == "AUD008"
+        and str(error.get("message", "")).startswith("audit details ")
+    ):
+        report = dict(report)
+        report["error"] = {**error, "rule_id": "AUD013"}
+    return report
+
 
 # Keep the public and internal compatibility API while replacing only audit handling.
 append_audit = _strict_append_audit
@@ -24,6 +40,7 @@ verify_audit = _strict_verify_audit
 _load_controls = _legacy._load_controls
 _baseline_for_scope = _legacy._baseline_for_scope
 _scope_summary = _legacy._scope_summary
+_audit.inspect_audit = inspect_audit
 _legacy.append_audit = append_audit
 _legacy.verify_audit = verify_audit
 
