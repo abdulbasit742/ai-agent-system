@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 3,
-    "next_expected": 4
+    "latest_completed": 4,
+    "next_expected": 5
   },
   "completed": [
     {
@@ -49,6 +49,25 @@
         "changed_file_cli": "passed",
         "unchanged_legacy_exclusion": "passed",
         "deleted_and_renamed_baseline_scope": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 4,
+      "title": "Added-line-only security gate",
+      "status": "completed",
+      "summary": "Added zero-context old/new hunk scopes and a low-noise gate that reports only findings starting on added or replaced lines while resolving baselines only through old changed lines.",
+      "verification": {
+        "unit_tests": 53,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "added_line_scope_model": "passed",
+        "added_line_cli": "passed",
+        "legacy_line_noise_exclusion": "passed",
+        "line_shift_baseline_stability": "passed",
+        "deleted_file_resolution": "passed",
+        "pure_rename_silence": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
