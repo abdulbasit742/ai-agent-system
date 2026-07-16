@@ -13,6 +13,7 @@
     "count": 1,
     "max_size_bytes": 1048576,
     "modules": [
+      "agent_audit.py",
       "agent_baseline.py",
       "agent_changed_lines.py",
       "agent_cli.py",
@@ -20,6 +21,7 @@
       "agent_git.py",
       "agent_policy.py",
       "agent_system.py",
+      "agent_system_legacy.py",
       "agent_version.py"
     ],
     "console_scripts": [
