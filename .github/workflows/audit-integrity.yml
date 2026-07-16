@@ -30,6 +30,13 @@ jobs:
             exit "$STATUS"
           fi
           cat "$RUNNER_TEMP/audit-tests.log"
+      - name: Preserve audit test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-tests.log
+          if-no-files-found: error
       - name: Compile audit runtime
         run: python -m compileall -q agent_audit.py agent_system.py agent_system_legacy.py tests/test_agent_audit.py
 
