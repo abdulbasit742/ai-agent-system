@@ -33,7 +33,11 @@ jobs:
         run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k changed_rule_scope -v
       - name: Test baseline CLI overwrite protection
         run: python -m unittest discover -s tests -p "test_baseline_cli.py" -k refuses_overwrite -v
-      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py tests scripts
+      - name: Test Git change-scope model
+        run: python -m unittest discover -s tests -p "test_agent_git.py" -v
+      - name: Test changed-file scanner CLI
+        run: python -m unittest discover -s tests -p "test_changed_scan_cli.py" -v
+      - run: python -m compileall -q agent_system.py agent_policy.py agent_config.py agent_baseline.py agent_git.py tests scripts
       - run: python agent_system.py config .agent-system.example.json
       - run: python agent_system.py policy .agent-system-policy.example.json
       - run: python agent_system.py --audit-log /tmp/agent-audit.jsonl baseline /tmp/agent-baseline.json --create --scan-path .
