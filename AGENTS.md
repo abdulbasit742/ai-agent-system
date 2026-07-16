@@ -1,7 +1,7 @@
 # Repository Agent Guidance
 
 - Keep the root control plane dependency-free, local-first, and dry-run-first.
-- Never commit secrets, populated `.env` files, private data, generated reports, audit logs, or segment archives.
+- Never commit secrets, populated `.env` files, private data, generated reports, audit logs, segment archives, or segment catalogs.
 - Do not copy, fetch, vendor, or include `Dicklesworthstone/destructive_command_guard`; its current license restricts OpenAI and related parties.
 - Preserve licenses and reviewed commits in `integrations.lock.json`.
 - Add stable rule IDs and regression tests for scanner or command-guard changes.
@@ -19,8 +19,8 @@
 - Workflow annotations, job summaries, and generated SARIF must never contain scanner preview evidence.
 - Recommended pull-request workflows must remain read-only and must not use `pull_request_target` for untrusted code.
 - `agent_version.py` is the only package version source; do not duplicate a static version in `pyproject.toml`, validators, or CLI wrappers.
-- The public wheel must remain runtime-dependency-free and contain only the reviewed twelve-module allowlist.
-- Tests, docs, action internals, integration locks, external repositories, environment files, baselines, reports, audit-log data, and segment archives must never enter the wheel.
+- The public wheel must remain runtime-dependency-free and contain only the reviewed thirteen-module allowlist.
+- Tests, docs, action internals, integration locks, external repositories, environment files, baselines, reports, audit-log data, segment archives, and segment catalogs must never enter the wheel.
 - Installed-wheel `doctor` and integration `run` commands must fail closed rather than silently vendoring or changing pinned integrations.
 - Audit logs must use strict UTF-8 canonical JSON Lines, exact legacy/versioned schemas, UTC timestamps, printable events, object details, lowercase SHA-256 links, and versioned physical-line sequences.
 - Every audit append must hold the sidecar advisory lock and verify the complete existing chain before deriving the next sequence and previous hash. Invalid chains must never be extended.
@@ -37,6 +37,11 @@
 - The archive directory must independently verify before the active log is atomically replaced. Failure ordering must preserve the original active bytes rather than truncate them.
 - Every non-initial archived segment and the active log must begin with an exact typed continuity record for the immediately preceding segment. Never infer, sort, skip, repair, or merge segment history automatically.
 - Complete segment-chain verification must begin at index one and should require an independently retained latest segment ID. Unsigned segment manifests are integrity commitments, not signer authentication.
+- Audit segment catalogs must live in a dedicated archive root, auto-discover only regular immediate-child segment directories, and bind safe relative directory names plus manifest/data digests and audit metadata.
+- Catalog verification must compare stored entries with independently discovered sealed evidence exactly; missing, renamed, replaced, reordered, extra, or forked segments must fail with stable `AUCxxx` diagnostics.
+- Catalog synchronization must require the latest externally retained `catalog_id`, retain the current catalog as an exact prefix, append only right-descendant segments, and preserve bytes on stale pins, forks, or active-log mismatch.
+- Catalog creation must be no-overwrite; synchronization must be lock-coordinated and same-directory atomic. A verified no-op sync must not rewrite bytes or change the catalog ID.
+- Catalog IDs and predecessor links are unsigned integrity commitments. They do not authenticate the operator, and forks must never be repaired or merged automatically.
 - Release bundles must use exact commit SHAs and `SOURCE_DATE_EPOCH`; never include wall-clock build time, runner identity, or mutable branch names.
 - Release output directories must be new or empty. Never delete or overwrite existing release content.
 - Release verification must check the exact file boundary, canonical manifest integrity, wheel metadata, evidence metadata, sizes, SHA-256 checksums, and byte-for-byte reproducibility.
@@ -66,13 +71,13 @@
 - Consistency-proof creation may accept only identical or right-descendant histories. Rollback and fork requests must retain stable `CNS010` and `CNS011` denials and must not create proof files.
 - Previous and candidate checkpoint IDs must be externally pinned for consistency verification; proof files do not authenticate checkpoint producers.
 - Consistency proof outputs must remain immutable, canonical, symlink-safe, atomic no-overwrite files and must exclude trust entries, source contents, credentials, and transition-policy details.
-- Ordinary CI may build, verify, admit, compare, exercise temporary audit logs, typed-event gates, segment rotations, trust states, checkpoints, and consistency proofs, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
+- Ordinary CI may build, verify, admit, compare, exercise temporary audit logs, typed-event gates, segment rotations, segment catalogs, trust states, checkpoints, and consistency proofs, and upload evidence decisions but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
+python -m compileall -q agent_audit.py agent_audit_events.py agent_audit_segments.py agent_audit_catalog.py agent_system.py agent_system_legacy.py agent_policy.py agent_config.py agent_baseline.py agent_git.py agent_changed_lines.py agent_cli.py agent_version.py tests scripts
 python agent_system.py config .agent-system.example.json
 python agent_system.py policy .agent-system-policy.example.json
 python agent_system.py audit-events --format json
@@ -84,6 +89,7 @@ python agent_system.py audit --path /tmp/agent-line-audit.jsonl --require-typed 
 python -m unittest discover -s tests -p "test_agent_audit.py" -v
 python -m unittest discover -s tests -p "test_audit_event_admission.py" -v
 python -m unittest discover -s tests -p "test_audit_segments.py" -v
+python -m unittest discover -s tests -p "test_audit_catalog.py" -v
 python -m unittest discover -s tests -p "test_github_action.py" -v
 python -m unittest discover -s tests -p "test_action_entrypoint.py" -v
 python -m unittest discover -s tests -p "test_packaging.py" -v
