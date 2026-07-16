@@ -32,7 +32,12 @@ All notable public distribution changes are recorded here.
 - stable `AUDxxx` diagnostics for malformed JSON, duplicate keys, partial writes, schema drift, chain breaks, and canonicalization failures
 - externally pinned audit record counts and head hashes for rollback/replay detection
 - immutable atomic verified-prefix recovery copies that never mutate damaged source logs
-- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, and audit-integrity artifacts with no publication, signing key, OIDC request, or registry credentials
+- versioned typed audit-event schemas for scan, added-line, baseline, guard, scrub, and dispatch records
+- bounded generic audit events with credential-bearing key/value rejection
+- domain-separated SHA-256 references for paths, command arrays, and Git refs without retaining raw values
+- typed/untyped coverage, event counts, privacy-state reporting, and optional typed-only migration enforcement
+- stable `AUD022`, `AUD023`, and `AUD024` event-admission diagnostics
+- read-only CI release-readiness, admission, transition, trust-state, checkpoint, consistency, audit-integrity, and event-admission artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
 
