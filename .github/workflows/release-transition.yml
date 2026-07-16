@@ -21,10 +21,9 @@ jobs:
         run: python scripts/release_transition.py policy .release-transition.example.json
       - name: Build current verified release bundle
         id: release
-        env:
-          SOURCE_DATE_EPOCH: ${{ github.event.repository.updated_at }}
         run: |
           EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH="$EPOCH"
           python -m pip wheel . --no-deps --wheel-dir dist-transition
           python scripts/release_bundle.py create \
             --wheel dist-transition/*.whl \
