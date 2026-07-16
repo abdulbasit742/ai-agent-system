@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 12,
-    "next_expected": 13
+    "latest_completed": 13,
+    "next_expected": 14
   },
   "completed": [
     {
@@ -267,6 +267,30 @@
         "immutable_atomic_artifacts": "passed",
         "rollback_and_fork_lineage_gates": "passed",
         "read_only_checkpoint_ci": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 13,
+      "title": "Compact Merkle consistency proofs",
+      "status": "completed",
+      "summary": "Added portable append-only consistency proofs between externally pinned checkpoints using canonical compact hash frontiers, proof-only verification, immutable artifacts, and explicit rollback/fork denials.",
+      "verification": {
+        "unit_tests": 201,
+        "python_versions": [
+          "3.11",
+          "3.12"
+        ],
+        "compileall": "passed",
+        "canonical_compact_range_layout": "passed",
+        "previous_and_candidate_root_reconstruction": "passed",
+        "proof_only_checkpoint_verification": "passed",
+        "logarithmic_proof_size": "passed",
+        "rehashed_frontier_and_layout_tamper_rejection": "passed",
+        "immutable_atomic_artifacts": "passed",
+        "rollback_and_fork_denials": "passed",
+        "read_only_consistency_ci": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
