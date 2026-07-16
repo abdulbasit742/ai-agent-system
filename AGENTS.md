@@ -24,8 +24,13 @@
 - Installed-wheel `doctor` and integration `run` commands must fail closed rather than silently vendoring or changing pinned integrations.
 - Release bundles must use exact commit SHAs and `SOURCE_DATE_EPOCH`; never include wall-clock build time, runner identity, or mutable branch names.
 - Release output directories must be new or empty. Never delete or overwrite existing release content.
-- Release verification must check the exact file boundary, canonical manifest integrity, wheel metadata, sizes, SHA-256 checksums, and byte-for-byte reproducibility.
-- Ordinary CI may build, verify, and upload evidence artifacts but must never publish a package, create a release, request OIDC credentials, or read registry secrets.
+- Release verification must check the exact file boundary, canonical manifest integrity, wheel metadata, evidence metadata, sizes, SHA-256 checksums, and byte-for-byte reproducibility.
+- Each wheel must have a deterministic SPDX 2.3 JSON SBOM and an unsigned in-toto Statement v1 / SLSA provenance v1 evidence file.
+- SBOMs must describe only the reviewed wheel modules, carry MIT package/file conclusions, and bind each module to SHA-1 and SHA-256 checksums.
+- Provenance must bind the exact wheel digest, source commit, source epoch, package identity, module list, console commands, and zero-runtime-dependency boundary.
+- Evidence verification must regenerate expected SBOM and provenance objects from the bundled wheel; matching manifest hashes alone are insufficient.
+- Never describe unsigned provenance as signed, authenticated, transparency-logged, or non-repudiable.
+- Ordinary CI may build, verify, and upload evidence artifacts but must never publish a package, create a release, request OIDC credentials, use signing keys, or read registry secrets.
 
 Verification:
 
@@ -42,6 +47,7 @@ python -m unittest discover -s tests -p "test_action_entrypoint.py" -v
 python -m unittest discover -s tests -p "test_packaging.py" -v
 python -m unittest discover -s tests -p "test_wheel_validator.py" -v
 python -m unittest discover -s tests -p "test_release_bundle.py" -v
+python -m unittest discover -s tests -p "test_supply_chain_evidence.py" -v
 python -m pip wheel . --no-deps --wheel-dir dist
 python scripts/validate_wheel.py dist/*.whl
 python scripts/release_bundle.py create --wheel dist/*.whl --output-dir release --source-commit "$(git rev-parse HEAD)" --source-date-epoch "$(git show -s --format=%ct HEAD)"
