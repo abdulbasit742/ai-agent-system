@@ -2,6 +2,14 @@
 
 All notable public distribution changes are recorded here.
 
+## Unreleased
+
+- deterministic release-evidence bundles with canonical JSON manifests and SHA-256 checksums
+- byte-for-byte wheel reproducibility verification using one source commit epoch
+- exact source commit, package metadata, artifact size, digest, and console-command evidence
+- fail-closed bundle verification for tampering, extra files, symlinks, malformed checksums, and metadata drift
+- read-only CI release-readiness artifacts with no registry publication or credentials
+
 ## 0.1.0 — 2026-07-16
 
 Initial installable package release candidate.
