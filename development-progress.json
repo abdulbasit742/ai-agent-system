@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "sequence": {"start": 1, "end": 400, "latest_completed": 27, "next_expected": 28},
+  "sequence": {"start": 1, "end": 400, "latest_completed": 28, "next_expected": 29},
   "history": [
     {"start": 1, "end": 22, "repository_commit": "071e61f8fb06480ae6809bb9c8c3d71a0e84be36", "path": "development-progress.json", "content_sha": "1bda3c586f392a4c48379164664bdb92661efa38"}
   ],
@@ -39,6 +39,13 @@
       "status": "completed",
       "summary": "Added a consumer-owned canonical receiver state that anchors admitted snapshot handoffs and atomically advances through admitted transition handoffs with exact retained-head binding, replay protection, external freshness pins, and immutable denial behavior.",
       "verification": {"unit_tests": 485, "python_versions": ["3.11", "3.12"], "compileall": "passed", "snapshot_anchor_and_transition_advance": "passed", "canonical_hash_chained_receiver_state": "passed", "external_receiver_state_pin": "passed", "handoff_admission_and_identity_binding": "passed", "retained_checkpoint_state_and_entry_count_binding": "passed", "replay_rollback_and_nonadvancing_rejection": "passed", "denied_and_invalid_byte_immutability": "passed", "mode_0600_atomic_locked_updates": "passed", "installed_trust_receiver_cli": "passed", "read_only_trust_receiver_ci": "passed", "twenty_four_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
+    },
+    {
+      "number": 28,
+      "title": "Portable audit trust receiver Merkle checkpoints",
+      "status": "completed",
+      "summary": "Added canonical Merkle checkpoints for pinned receiver states, compact per-handoff inclusion proofs, proof-only verification, optional complete handoff binding, immutable evidence, and rollback/fork lineage gates.",
+      "verification": {"unit_tests": 505, "python_versions": ["3.11", "3.12"], "compileall": "passed", "canonical_receiver_checkpoint_and_merkle_root": "passed", "external_receiver_state_and_checkpoint_pins": "passed", "single_first_middle_head_and_odd_tree_proofs": "passed", "handoff_id_selection": "passed", "proof_only_verification": "passed", "snapshot_and_transition_handoff_binding": "passed", "rehashed_audit_path_and_checkpoint_substitution_rejection": "passed", "rollback_and_fork_lineage_gates": "passed", "immutable_mode_0600_outputs": "passed", "installed_receiver_checkpoint_cli": "passed", "read_only_receiver_checkpoint_ci": "passed", "twenty_five_module_dependency_free_wheel": "passed", "self_scan_active_findings": 0, "safe_command_guard": "passed"}
     }
   ]
 }
