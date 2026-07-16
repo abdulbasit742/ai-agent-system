@@ -87,7 +87,8 @@ jobs:
           transition = json.load(open(sys.argv[2]))
           assert snapshot["admitted"] and transition["admitted"]
           assert transition["evidence"]["receiver_entry_delta"] == 2
-          assert transition["evidence"]["trust_entry_delta"] == 2
+          assert transition["evidence"]["trust_entry_delta"] == 4
+          assert transition["evidence"]["generation_delta"] == 2
           PY
           python - <<'PY' "$ROOT/policy.json"
           import json, sys
