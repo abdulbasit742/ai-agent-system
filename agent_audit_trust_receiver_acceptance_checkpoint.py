@@ -134,6 +134,25 @@ _core._proof_identifier = _proof_identifier
 _core._lineage_identifier = _lineage_identifier
 _core._head = _head
 
+_original_lineage = _core.lineage
+
+
+def lineage(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    report = _original_lineage(left, right)
+    core = {key: value for key, value in report.items() if key != "lineage_id"}
+    violations: list[dict[str, Any]] = []
+    for violation in core.get("violations", []):
+        normalized = dict(violation)
+        rule_id = normalized.get("rule_id")
+        if isinstance(rule_id, str) and rule_id.startswith("ARC") and len(rule_id) == 6:
+            normalized["rule_id"] = RULE_PREFIX + rule_id[3:]
+        violations.append(normalized)
+    core["violations"] = violations
+    return {**core, "lineage_id": _lineage_identifier(core)}
+
+
+_core.lineage = lineage
+
 CHECKPOINT_VERSION = _core.CHECKPOINT_VERSION
 PROOF_VERSION = _core.PROOF_VERSION
 LINEAGE_VERSION = _core.LINEAGE_VERSION
@@ -148,7 +167,6 @@ create_proof = _core.create_proof
 validate_proof = _core.validate_proof
 proof_matches_checkpoint = _core.proof_matches_checkpoint
 proof_matches_handoff = _core.proof_matches_handoff
-lineage = _core.lineage
 load_checkpoint = _core.load_checkpoint
 load_proof = _core.load_proof
 main = _core.main
