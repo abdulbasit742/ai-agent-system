@@ -3,8 +3,8 @@
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 4,
-    "next_expected": 5
+    "latest_completed": 5,
+    "next_expected": 6
   },
   "completed": [
     {
@@ -68,6 +68,25 @@
         "line_shift_baseline_stability": "passed",
         "deleted_file_resolution": "passed",
         "pure_rename_silence": "passed",
+        "self_scan_active_findings": 0,
+        "safe_command_guard": "passed"
+      }
+    },
+    {
+      "number": 5,
+      "title": "First-party GitHub Action",
+      "status": "completed",
+      "summary": "Added a read-only composite action with full, changed-file, and added-line modes, immutable pull-request event refs, workspace-contained inputs and outputs, preview-free annotations and summaries, JSON/SARIF reports, and structured outputs.",
+      "verification": {
+        "unit_tests": 64,
+        "python_versions": ["3.11", "3.12"],
+        "compileall": "passed",
+        "action_runner_tests": "passed",
+        "composite_action_smoke": "passed",
+        "exact_pull_request_sha_defaults": "passed",
+        "workspace_path_containment": "passed",
+        "preview_free_annotations_and_sarif": "passed",
+        "stale_report_protection": "passed",
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
