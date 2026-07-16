@@ -127,7 +127,11 @@ def _identifiers(value: Any, label: str) -> list[str]:
     return sorted(normalized)
 
 
-def _expect_fields(details: dict[str, Any], required: set[str], optional: set[str] = frozenset()) -> None:
+def _expect_fields(
+    details: dict[str, Any],
+    required: set[str],
+    optional: set[str] = frozenset(),
+) -> None:
     fields = set(details)
     allowed = required | optional
     missing = sorted(required - fields)
@@ -139,13 +143,13 @@ def _expect_fields(details: dict[str, Any], required: set[str], optional: set[st
 
 
 def _reference_text(value: Any, label: str) -> str:
+    """Validate an opaque reference before hashing it; never inspect or retain its content."""
     if isinstance(value, Path):
         value = str(value)
     if not isinstance(value, str) or not value or len(value) > MAX_REFERENCE_LENGTH:
         raise AuditEventError(f"{label} must be a bounded non-empty reference")
     if any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise AuditEventError(f"{label} contains control characters")
-    _reject_secret_text(value, label)
     return value.replace("\\", "/")
 
 
@@ -158,7 +162,10 @@ def path_reference(value: Any, label: str = "path") -> dict[str, Any] | None:
         kind = _identifier(value["kind"], f"{label}.kind")
         if kind not in {"absolute", "relative"}:
             raise AuditEventError(f"{label}.kind must be absolute or relative")
-        return {"kind": kind, "sha256": _hex(value["sha256"], f"{label}.sha256", HEX_64)}
+        return {
+            "kind": kind,
+            "sha256": _hex(value["sha256"], f"{label}.sha256", HEX_64),
+        }
     text = _reference_text(value, label)
     absolute = text.startswith("/") or bool(re.match(r"^[A-Za-z]:/", text))
     return {
@@ -168,7 +175,7 @@ def path_reference(value: Any, label: str = "path") -> dict[str, Any] | None:
 
 
 def command_reference(value: Any, label: str = "command") -> dict[str, Any]:
-    """Convert an argument array into a digest and argument count without storing arguments."""
+    """Convert an argument array into a digest and count without storing arguments."""
     if isinstance(value, dict):
         _expect_fields(value, {"argc", "sha256"})
         return {
@@ -177,10 +184,16 @@ def command_reference(value: Any, label: str = "command") -> dict[str, Any]:
         }
     if not isinstance(value, list) or not value or len(value) > MAX_COMMAND_ARGUMENTS:
         raise AuditEventError(f"{label} must be a bounded non-empty argument array")
-    arguments = [_reference_text(item, f"{label}[{index}]") for index, item in enumerate(value)]
+    arguments = [
+        _reference_text(item, f"{label}[{index}]")
+        for index, item in enumerate(value)
+    ]
     return {
         "argc": len(arguments),
-        "sha256": _domain_hash("audit-command-v1", _canonical_bytes(arguments).decode("ascii")),
+        "sha256": _domain_hash(
+            "audit-command-v1",
+            _canonical_bytes(arguments).decode("ascii"),
+        ),
     }
 
 
@@ -195,7 +208,9 @@ def _scope_reference(value: Any) -> dict[str, Any] | None:
         "changed", "current_files", "deleted", "renamed", "line_mode", "line_files",
         "added_ranges", "removed_ranges", "full_file_scans", "full_file_resolutions",
     }
-    stored_fields = (raw_fields - {"base_ref", "head_ref"}) | {"base_ref_sha256", "head_ref_sha256"}
+    stored_fields = (raw_fields - {"base_ref", "head_ref"}) | {
+        "base_ref_sha256", "head_ref_sha256"
+    }
     if set(value).issubset(raw_fields):
         output: dict[str, Any] = {}
         for key, item in value.items():
@@ -203,7 +218,8 @@ def _scope_reference(value: Any) -> dict[str, Any] | None:
                 output[key] = _identifier(item, "scope.type")
             elif key in {"base_ref", "head_ref"}:
                 output[f"{key}_sha256"] = _domain_hash(
-                    "audit-git-ref-v1", _reference_text(item, f"scope.{key}")
+                    "audit-git-ref-v1",
+                    _reference_text(item, f"scope.{key}"),
                 )
             elif key in {"base_sha", "head_sha", "merge_base_sha"}:
                 output[key] = _hex(item, f"scope.{key}", HEX_40)
@@ -230,31 +246,32 @@ def _scope_reference(value: Any) -> dict[str, Any] | None:
     return dict(sorted(output.items()))
 
 
-def _decision(details: dict[str, Any], *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
-    required = {"allowed", "rule_id", "severity", "reason", "safer_alternative"}
-    if extra:
-        required |= set(extra)
-    _expect_fields(details, required)
+def _decision(details: dict[str, Any]) -> dict[str, Any]:
+    _expect_fields(
+        details,
+        {"allowed", "rule_id", "severity", "reason", "safer_alternative"},
+    )
     output: dict[str, Any] = {
         SCHEMA_FIELD: EVENT_SCHEMA_VERSION,
         "allowed": _boolean(details["allowed"], "allowed"),
         "reason": _text(details["reason"], "reason"),
         "rule_id": _identifier(details["rule_id"], "rule_id", nullable=True),
-        "safer_alternative": _text(details["safer_alternative"], "safer_alternative"),
+        "safer_alternative": _text(
+            details["safer_alternative"],
+            "safer_alternative",
+        ),
         "severity": _identifier(details["severity"], "severity", nullable=True),
     }
     if output["severity"] not in {None, "low", "medium", "high", "critical"}:
         raise AuditEventError("severity is outside the reviewed set")
-    if extra:
-        output.update(extra)
     return dict(sorted(output.items()))
 
 
 def _scan(details: dict[str, Any]) -> dict[str, Any]:
     required = {
-        "path", "active", "reported", "suppressed", "policy", "expired_suppressions",
-        "config", "enabled_packs", "disabled_rules", "new_only", "baseline", "new",
-        "existing", "resolved", "scope",
+        "path", "active", "reported", "suppressed", "policy",
+        "expired_suppressions", "config", "enabled_packs", "disabled_rules",
+        "new_only", "baseline", "new", "existing", "resolved", "scope",
     }
     _expect_fields(details, required)
     return dict(sorted({
@@ -265,10 +282,14 @@ def _scan(details: dict[str, Any]) -> dict[str, Any]:
         "disabled_rules": _identifiers(details["disabled_rules"], "disabled_rules"),
         "enabled_packs": _identifiers(details["enabled_packs"], "enabled_packs"),
         "existing": _integer(details["existing"], "existing", nullable=True),
-        "expired_suppressions": _identifiers(details["expired_suppressions"], "expired_suppressions"),
+        "expired_suppressions": _identifiers(
+            details["expired_suppressions"],
+            "expired_suppressions",
+        ),
         "new": _integer(details["new"], "new", nullable=True),
         "new_only": _boolean(details["new_only"], "new_only"),
         "path": path_reference(details["path"], "path"),
+        "policy": path_reference(details["policy"], "policy"),
         "reported": _integer(details["reported"], "reported"),
         "resolved": _integer(details["resolved"], "resolved", nullable=True),
         "scope": _scope_reference(details["scope"]),
@@ -277,20 +298,30 @@ def _scan(details: dict[str, Any]) -> dict[str, Any]:
 
 
 def _baseline_create(details: dict[str, Any]) -> dict[str, Any]:
-    _expect_fields(details, {"path", "scan_path", "findings", "suppressed", "controls_sha256", "baseline_sha256"})
+    _expect_fields(
+        details,
+        {
+            "path", "scan_path", "findings", "suppressed",
+            "controls_sha256", "baseline_sha256",
+        },
+    )
     return dict(sorted({
         SCHEMA_FIELD: EVENT_SCHEMA_VERSION,
-        "baseline_sha256": _hex(details["baseline_sha256"], "baseline_sha256", HEX_64),
-        "controls_sha256": _hex(details["controls_sha256"], "controls_sha256", HEX_64),
+        "baseline_sha256": _hex(
+            details["baseline_sha256"],
+            "baseline_sha256",
+            HEX_64,
+        ),
+        "controls_sha256": _hex(
+            details["controls_sha256"],
+            "controls_sha256",
+            HEX_64,
+        ),
         "findings": _integer(details["findings"], "findings"),
         "path": path_reference(details["path"], "path"),
         "scan_path": path_reference(details["scan_path"], "scan_path"),
         "suppressed": _integer(details["suppressed"], "suppressed"),
     }.items()))
-
-
-def _guard(details: dict[str, Any]) -> dict[str, Any]:
-    return _decision(details)
 
 
 def _scrub(details: dict[str, Any]) -> dict[str, Any]:
@@ -304,7 +335,13 @@ def _scrub(details: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dispatch(details: dict[str, Any]) -> dict[str, Any]:
-    _expect_fields(details, {"integration", "command", "allowed", "rule_id", "severity", "reason", "safer_alternative"})
+    _expect_fields(
+        details,
+        {
+            "integration", "command", "allowed", "rule_id", "severity",
+            "reason", "safer_alternative",
+        },
+    )
     decision = _decision({
         "allowed": details["allowed"],
         "rule_id": details["rule_id"],
@@ -333,7 +370,10 @@ def _generic_value(value: Any, label: str, *, depth: int = 0) -> Any:
     if isinstance(value, list):
         if len(value) > MAX_LIST_ITEMS:
             raise AuditEventError(f"{label} exceeds the reviewed array length")
-        return [_generic_value(item, f"{label}[{index}]", depth=depth + 1) for index, item in enumerate(value)]
+        return [
+            _generic_value(item, f"{label}[{index}]", depth=depth + 1)
+            for index, item in enumerate(value)
+        ]
     if isinstance(value, dict):
         if len(value) > MAX_OBJECT_FIELDS:
             raise AuditEventError(f"{label} exceeds the reviewed object-field count")
@@ -346,9 +386,15 @@ def _generic_value(value: Any, label: str, *, depth: int = 0) -> Any:
                     f"{label}.{key} is a reserved or credential-bearing field",
                     rule_id="AUD023",
                 )
-            output[key] = _generic_value(item, f"{label}.{key}", depth=depth + 1)
+            output[key] = _generic_value(
+                item,
+                f"{label}.{key}",
+                depth=depth + 1,
+            )
         return dict(sorted(output.items()))
-    raise AuditEventError(f"{label} contains unsupported type {type(value).__name__}")
+    raise AuditEventError(
+        f"{label} contains unsupported type {type(value).__name__}"
+    )
 
 
 def _generic(details: dict[str, Any]) -> dict[str, Any]:
@@ -360,7 +406,7 @@ def _generic(details: dict[str, Any]) -> dict[str, Any]:
 _NORMALIZERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "baseline-create": _baseline_create,
     "dispatch": _dispatch,
-    "guard": _guard,
+    "guard": _decision,
     "scan": _scan,
     "scan-added-lines": _scan,
     "scrub": _scrub,
@@ -377,22 +423,26 @@ def prepare_event(event: Any, details: Any) -> tuple[str, dict[str, Any]]:
     normalizer = _NORMALIZERS.get(normalized_event, _generic)
     normalized = normalizer(raw)
     if len(_canonical_bytes(normalized)) > MAX_DETAILS_BYTES:
-        raise AuditEventError("audit event details exceed the reviewed encoded-size boundary")
+        raise AuditEventError(
+            "audit event details exceed the reviewed encoded-size boundary"
+        )
     return normalized_event, normalized
 
 
 def validate_stored_event(event: Any, details: Any) -> bool:
     """Validate one stored event. Return False for pre-schema legacy details."""
-    normalized_event = _event_name(event)
     if not isinstance(details, dict):
         raise AuditEventError("audit details must be a JSON object")
     if SCHEMA_FIELD not in details:
         return False
     if details.get(SCHEMA_FIELD) != EVENT_SCHEMA_VERSION:
         raise AuditEventError("audit event schema version is unsupported")
+    normalized_event = _event_name(event)
     _, normalized = prepare_event(normalized_event, details)
     if normalized != details:
-        raise AuditEventError("audit event details are not in canonical typed form")
+        raise AuditEventError(
+            "audit event details are not in canonical typed form"
+        )
     return True
 
 
@@ -402,7 +452,7 @@ def inspect_event_records(
     *,
     require_typed: bool = False,
 ) -> dict[str, Any]:
-    """Extend a structurally valid audit report with event-schema and privacy checks."""
+    """Extend a structurally valid audit report with event-schema checks."""
     extended = dict(report)
     extended.update({
         "event_schema_version": EVENT_SCHEMA_VERSION,
@@ -413,7 +463,11 @@ def inspect_event_records(
         "event_counts": {},
         "require_typed": bool(require_typed),
     })
-    if not report.get("valid") or not Path(path).exists() or report.get("records", 0) == 0:
+    if (
+        not report.get("valid")
+        or not Path(path).exists()
+        or report.get("records", 0) == 0
+    ):
         return extended
 
     raw = Path(path).read_bytes()
@@ -448,7 +502,10 @@ def inspect_event_records(
                 extended["valid"] = False
                 extended["error"] = {
                     "rule_id": "AUD024",
-                    "message": "audit log contains a pre-schema event record while typed coverage is required",
+                    "message": (
+                        "audit log contains a pre-schema event record while "
+                        "typed coverage is required"
+                    ),
                     "line": line_number,
                     "byte_offset": offset,
                     "recoverable": False,
@@ -458,33 +515,41 @@ def inspect_event_records(
         offset += len(raw_line)
 
     extended["event_counts"] = dict(sorted(event_counts.items()))
-    records = extended["typed_records"] + extended["untyped_records"]
-    if records:
-        extended["typed_coverage_percent"] = (100 * extended["typed_records"]) // records
-        extended["privacy_safe"] = extended["untyped_records"] == 0 and extended["valid"]
+    processed = extended["typed_records"] + extended["untyped_records"]
+    if processed:
+        extended["typed_coverage_percent"] = (
+            100 * extended["typed_records"]
+        ) // processed
+        extended["privacy_safe"] = (
+            extended["untyped_records"] == 0 and extended["valid"]
+        )
     return extended
 
 
 def event_catalog() -> dict[str, Any]:
-    """Return the stable event-admission catalog without implementation details."""
+    """Return the stable event-admission catalog."""
     return {
         "event_schema_version": EVENT_SCHEMA_VERSION,
         "known_events": list(KNOWN_EVENTS),
         "generic_events": {
             "allowed": True,
             "event_name": "lowercase hyphenated",
-            "details": "bounded safe JSON object without credential-bearing keys or values",
+            "details": (
+                "bounded safe JSON object without credential-bearing keys or values"
+            ),
         },
         "privacy": {
             "commands": "domain-separated SHA-256 plus argument count",
             "paths": "domain-separated SHA-256 plus absolute/relative kind",
             "git_refs": "domain-separated SHA-256",
-            "credential_like_material": "rejected",
+            "credential_like_free_form_material": "rejected",
             "maximum_details_bytes": MAX_DETAILS_BYTES,
         },
         "rules": {
             "AUD022": "typed event schema or canonicalization failure",
             "AUD023": "credential-bearing audit detail rejected",
-            "AUD024": "typed coverage required but legacy untyped records remain",
+            "AUD024": (
+                "typed coverage required but legacy untyped records remain"
+            ),
         },
     }
