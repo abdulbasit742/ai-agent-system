@@ -41,6 +41,7 @@ basit-agent-audit-bundle = "agent_audit_bundle:main"
 basit-agent-audit-admission = "agent_audit_admission:main"
 basit-agent-audit-trust = "agent_audit_trust:main"
 basit-agent-audit-trust-checkpoint = "agent_audit_trust_checkpoint:main"
+basit-agent-audit-trust-consistency = "agent_audit_trust_consistency:main"
 agent-system = "agent_cli:main"
 agent-changed-lines = "agent_cli:changed_lines_main"
 agent-audit-segments = "agent_audit_segments:main"
@@ -51,6 +52,7 @@ agent-audit-bundle = "agent_audit_bundle:main"
 agent-audit-admission = "agent_audit_admission:main"
 agent-audit-trust = "agent_audit_trust:main"
 agent-audit-trust-checkpoint = "agent_audit_trust_checkpoint:main"
+agent-audit-trust-consistency = "agent_audit_trust_consistency:main"
 
 [tool.setuptools]
 include-package-data = false
@@ -65,6 +67,7 @@ py-modules = [
   "agent_audit_admission",
   "agent_audit_trust",
   "agent_audit_trust_checkpoint",
+  "agent_audit_trust_consistency",
   "agent_baseline",
   "agent_changed_lines",
   "agent_cli",

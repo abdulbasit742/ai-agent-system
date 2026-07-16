@@ -22,6 +22,7 @@ audit-bundle-trust-state.json
 audit-bundle-trust-state.json.lock
 audit-trust-checkpoint.json
 audit-trust-inclusion-proof.json
+audit-trust-consistency-proof.json
 dist-checkpoint-anchor/
 release-checkpoint-anchor/
 release-checkpoint.json

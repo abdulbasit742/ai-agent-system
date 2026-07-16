@@ -1,0 +1,131 @@
+name: audit-trust-consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  consistency-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test consistency proofs
+        run: python -m unittest discover -s tests -p "test_audit_trust_consistency.py" -v
+      - name: Re-run checkpoint and trust regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_bundle_trust.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_consistency.py tests/test_audit_trust_consistency.py
+
+  consistency-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build pinned states and checkpoints
+        run: |
+          ROOT="$RUNNER_TEMP/audit-trust-consistency"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          from test_audit_trust_consistency import anchor, advance
+          from agent_audit_trust import _atomic_write
+          from agent_audit_trust_checkpoint import create_checkpoint
+
+          root = Path(os.environ["ROOT"])
+          states = {
+              "anchor": anchor(),
+              "candidate": advance(anchor(), 2),
+              "fork": advance(anchor(), 3),
+          }
+          pins = {}
+          for name, state in states.items():
+              _atomic_write(root / f"{name}-state.json", state, require_absent=True)
+              checkpoint = create_checkpoint(state)
+              (root / f"{name}-checkpoint.json").write_text(
+                  json.dumps(checkpoint, sort_keys=True, indent=2) + "\n"
+              )
+              pins[f"{name}_state_id"] = state["state_id"]
+              pins[f"{name}_checkpoint_id"] = checkpoint["checkpoint_id"]
+          (root / "pins.json").write_text(json.dumps(pins, sort_keys=True))
+          PY
+      - name: Prove descendant and deny rollback or fork
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-consistency"
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          A_STATE=$(pin anchor_state_id); A_CP=$(pin anchor_checkpoint_id)
+          C_STATE=$(pin candidate_state_id); C_CP=$(pin candidate_checkpoint_id)
+          F_STATE=$(pin fork_state_id); F_CP=$(pin fork_checkpoint_id)
+
+          python agent_audit_trust_consistency.py prove \
+            "$ROOT/anchor-state.json" "$ROOT/anchor-checkpoint.json" \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/consistency.json" \
+            --expected-previous-state-id "$A_STATE" \
+            --expected-previous-checkpoint-id "$A_CP" \
+            --expected-candidate-state-id "$C_STATE" \
+            --expected-candidate-checkpoint-id "$C_CP" \
+            --format json > "$ROOT/prove.json"
+
+          set +e
+          python agent_audit_trust_consistency.py prove \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/anchor-state.json" "$ROOT/anchor-checkpoint.json" \
+            "$ROOT/rollback.json" \
+            --expected-previous-state-id "$C_STATE" \
+            --expected-previous-checkpoint-id "$C_CP" \
+            --expected-candidate-state-id "$A_STATE" \
+            --expected-candidate-checkpoint-id "$A_CP" \
+            --format json > "$ROOT/rollback.out" 2> "$ROOT/rollback.err"
+          ROLLBACK=$?
+          python agent_audit_trust_consistency.py prove \
+            "$ROOT/fork-state.json" "$ROOT/fork-checkpoint.json" \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/fork.json" \
+            --expected-previous-state-id "$F_STATE" \
+            --expected-previous-checkpoint-id "$F_CP" \
+            --expected-candidate-state-id "$C_STATE" \
+            --expected-candidate-checkpoint-id "$C_CP" \
+            --format json > "$ROOT/fork.out" 2> "$ROOT/fork.err"
+          FORK=$?
+          set -e
+          test "$ROLLBACK" -eq 1
+          test "$FORK" -eq 1
+          grep -q ATK009 "$ROOT/rollback.err"
+          grep -q ATK010 "$ROOT/fork.err"
+          test ! -e "$ROOT/rollback.json"
+          test ! -e "$ROOT/fork.json"
+      - name: Verify proof without either trust state
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/audit-trust-consistency"
+          A_CP=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["anchor_checkpoint_id"])' "$ROOT/pins.json")
+          C_CP=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidate_checkpoint_id"])' "$ROOT/pins.json")
+          rm "$ROOT/anchor-state.json" "$ROOT/candidate-state.json" "$ROOT/fork-state.json"
+          python agent_audit_trust_consistency.py verify \
+            "$ROOT/consistency.json" "$ROOT/anchor-checkpoint.json" "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$A_CP" \
+            --expected-candidate-checkpoint-id "$C_CP" \
+            --format json > "$ROOT/proof-only.json"
+      - name: Preserve consistency evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-consistency-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-consistency/
+          if-no-files-found: error

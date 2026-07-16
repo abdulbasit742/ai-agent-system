@@ -1,0 +1,128 @@
+name: audit-trust-consistency-package
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  consistency-package-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and validate dependency-free wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python scripts/validate_wheel.py dist/*.whl
+      - name: Install and exercise consistency aliases outside source checkout
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/consistency-venv"
+          BIN="$RUNNER_TEMP/consistency-venv/bin"
+          "$BIN/python" -m pip install --no-deps dist/*.whl
+          ROOT="$RUNNER_TEMP/installed-audit-trust-consistency"
+          mkdir -p "$ROOT/run"
+          cd "$ROOT/run"
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          from agent_audit_trust import _atomic_write, append_transition, create_state
+          from agent_audit_trust_checkpoint import create_checkpoint
+
+          root = Path.cwd().parent
+          def h(value): return f'{value:064x}'
+          snapshot = {
+              'valid': True, 'bundle_id': h(1001), 'bundle_type': 'snapshot',
+              'candidate': {'checkpoint_id': h(2001), 'catalog_id': h(3001),
+                            'generation': 1, 'segment_count': 1, 'merkle_root': h(4001)},
+              'previous': None, 'consistency': None, 'proof_count': 1,
+              'segment_count': 0, 'proof_ids': [h(5001)], 'segment_ids': [h(6001)],
+              'files': 4, 'bytes': 1000,
+          }
+          def report(verified, decision):
+              candidate = verified['candidate']; previous = verified.get('previous')
+              return {
+                  'admitted': True, 'policy_sha256': h(7000 + decision),
+                  'decision_id': h(8000 + decision),
+                  'identity': {
+                      'bundle_id': verified['bundle_id'], 'bundle_type': verified['bundle_type'],
+                      'candidate_checkpoint_id': candidate['checkpoint_id'],
+                      'candidate_catalog_id': candidate['catalog_id'],
+                      'previous_checkpoint_id': previous['checkpoint_id'] if previous else None,
+                      'previous_catalog_id': previous['catalog_id'] if previous else None,
+                  },
+                  'evidence': {
+                      'files': verified['files'], 'bytes': verified['bytes'],
+                      'proof_count': verified['proof_count'],
+                      'sealed_segment_count': verified['segment_count'],
+                      'selected_segment_indexes': [candidate['segment_count']],
+                      'selected_segment_ids': [h(6000 + decision)],
+                      'sealed_segment_indexes': [],
+                      'candidate_generation': candidate['generation'],
+                      'candidate_segment_count': candidate['segment_count'],
+                      'generation_delta': candidate['generation'] - previous['generation'] if previous else None,
+                  },
+                  'violations': [],
+              }
+          anchor = create_state(report(snapshot, 1), snapshot)
+          head = anchor['head']
+          transition = {
+              'valid': True, 'bundle_id': h(1002), 'bundle_type': 'transition',
+              'candidate': {'checkpoint_id': h(2002), 'catalog_id': h(3002),
+                            'generation': 2, 'segment_count': 2, 'merkle_root': h(4002)},
+              'previous': {'checkpoint_id': head['checkpoint_id'], 'catalog_id': head['catalog_id'],
+                           'generation': head['generation'], 'segment_count': head['segment_count'],
+                           'merkle_root': anchor['entries'][-1]['evidence']['merkle_root']},
+              'consistency': {'consistency_id': h(9002), 'relation': 'right-descendant',
+                              'direct_predecessor_verified': True},
+              'proof_count': 1, 'segment_count': 0, 'proof_ids': [h(5002)],
+              'segment_ids': [h(6002)], 'files': 7, 'bytes': 2000,
+          }
+          candidate = append_transition(anchor, report(transition, 2), transition)
+          pins = {}
+          for name, state in {'previous': anchor, 'candidate': candidate}.items():
+              _atomic_write(root / f'{name}-state.json', state, require_absent=True)
+              checkpoint = create_checkpoint(state)
+              (root / f'{name}-checkpoint.json').write_text(
+                  json.dumps(checkpoint, sort_keys=True, indent=2) + '\n'
+              )
+              pins[f'{name}_state_id'] = state['state_id']
+              pins[f'{name}_checkpoint_id'] = checkpoint['checkpoint_id']
+          (root / 'pins.json').write_text(json.dumps(pins, sort_keys=True))
+          PY
+          pin() { "$BIN/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          PREVIOUS_STATE_ID=$(pin previous_state_id)
+          PREVIOUS_CHECKPOINT_ID=$(pin previous_checkpoint_id)
+          CANDIDATE_STATE_ID=$(pin candidate_state_id)
+          CANDIDATE_CHECKPOINT_ID=$(pin candidate_checkpoint_id)
+          "$BIN/basit-agent-audit-trust-consistency" prove \
+            "$ROOT/previous-state.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/consistency.json" \
+            --expected-previous-state-id "$PREVIOUS_STATE_ID" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-state-id "$CANDIDATE_STATE_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/prove.json"
+          rm "$ROOT/previous-state.json" "$ROOT/candidate-state.json"
+          "$BIN/agent-audit-trust-consistency" verify \
+            "$ROOT/consistency.json" "$ROOT/previous-checkpoint.json" "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT_ID" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT_ID" \
+            --format json > "$ROOT/verify.json"
+          "$BIN/python" - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.cwd().parent
+          proved = json.loads((root / 'prove.json').read_text())
+          verified = json.loads((root / 'verify.json').read_text())
+          assert proved['valid'] is True and proved['relation'] == 'right-descendant'
+          assert verified['valid'] is True and verified['consistency_id'] == proved['consistency_id']
+          PY
