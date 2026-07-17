@@ -14,6 +14,8 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -30,13 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Create snapshot and transition bundles and verify offline
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/audit-trust-receiver-acceptance-trust-bundle"
+          ROOT="$GITHUB_WORKSPACE/.agent-system/audit-trust-receiver-acceptance-trust-bundle"
+          rm -rf "$ROOT"
           mkdir -p "$ROOT"
           ROOT="$ROOT" python - <<'PY'
           import json
@@ -106,10 +111,16 @@ jobs:
           EXTRA=$?
           set -e
           test "$EXTRA" -eq 2
-      - name: Preserve acceptance trust bundle evidence
+      - name: Preserve acceptance trust bundle decisions
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: audit-trust-receiver-acceptance-trust-bundle-${{ github.sha }}
-          path: ${{ runner.temp }}/audit-trust-receiver-acceptance-trust-bundle/
+          path: |
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/snapshot-create.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/transition-create.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/snapshot-verify.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/transition-verify.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/extra.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/extra-error.json
           if-no-files-found: warn
