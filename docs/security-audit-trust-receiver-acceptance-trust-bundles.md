@@ -8,7 +8,7 @@ Task 40 adds immutable snapshot and transition bundles above the pinned receiver
 
 1. Candidate and previous checkpoints must pass strict canonical validation.
 2. Every inclusion proof must bind exactly to the candidate checkpoint.
-3. At least one inclusion proof must authenticate the candidate head entry.
+3. At least one inclusion proof must prove inclusion of the candidate head entry in the candidate checkpoint.
 4. Transition bundles require a compact proof whose relation is `right-descendant` and whose checkpoint references exactly equal the copied checkpoints.
 5. Caller-supplied candidate, previous, and bundle IDs are validated before comparison and act as external freshness pins.
 6. Manifest paths are safe relative paths; duplicate paths, duplicate proof identities, symlinks, and unreviewed files are rejected.
