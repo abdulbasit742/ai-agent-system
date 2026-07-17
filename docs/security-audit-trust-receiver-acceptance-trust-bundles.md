@@ -15,7 +15,8 @@ Task 40 adds immutable snapshot and transition bundles above the pinned receiver
 7. Every evidence file is bound by role, size, SHA-256 digest, canonical manifest, sorted checksums, and a domain-separated bundle ID.
 8. Creation stages all bytes, re-verifies the staged directory, fsyncs files/directories, and publishes only to a new path.
 9. Existing outputs are never overwritten. Failure leaves no accepted partial bundle.
-10. The adapter runs the reviewed receiver-bundle engine in an isolated module namespace and does not mutate parent bundle globals.
+10. The adapter executes only the packaged reviewed receiver-bundle source after a fixed fail-closed token transformation in an isolated namespace; no external source or runtime input is compiled.
+11. The scanner exception is not a rule disable: `.agent-system-policy.json` binds `BAS013` to the exact adapter path and fingerprint, names an owner and rationale, and expires on 2027-07-17. Any source change invalidates the suppression automatically.
 
 ## Diagnostics
 
