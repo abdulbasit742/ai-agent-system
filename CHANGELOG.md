@@ -108,7 +108,12 @@ All notable public distribution changes are recorded here.
 - consumer-owned acceptance-bundle admission policies that fully verify bundles before applying acceptance/receiver/trust identity, proof-selection, and transition-delta controls
 - canonical acceptance admission policy hashes, deterministic decision IDs, policy-outside-bundle enforcement, manifest identity rechecks, and stable `ABA001` through `ABA016` denials
 - separate admitted (`0`), verified-but-denied (`1`), and malformed/unsafe/unverifiable (`2`) acceptance-bundle outcomes
-- installed audit, trust, receiver, receiver-acceptance, checkpoint, consistency, admission, and bundle aliases; a reviewed thirty-three-module/forty-six-command wheel; and synchronized release-admission boundaries
+- consumer-owned pinned receiver-acceptance trust states with exact outer acceptance and nested receiver/trust continuity, external freshness pins, replay protection, and stable `ABT001` through `ABT010` diagnostics
+- portable receiver-acceptance trust checkpoints and per-acceptance-bundle proofs with proof-only verification and stable `ABP001` through `ABP011` diagnostics
+- compact receiver-acceptance trust consistency proofs with independent root reconstruction, authenticated nested transition boundaries, and stable `ABR001` through `ABR011` diagnostics
+- portable snapshot and transition receiver-acceptance trust handoff bundles with mandatory candidate-head proofs, compact retained-checkpoint continuity, exact manifests/checksums, external pins, and offline verification
+- stable `ABB001` through `ABB012` diagnostics for unsafe paths, stale pins, composition errors, substitution, exact-boundary tampering, and immutable-output violations
+- installed audit, trust, receiver, receiver-acceptance, checkpoint, consistency, admission, and bundle aliases; a reviewed thirty-seven-module/fifty-four-command wheel; and synchronized release-admission boundaries
 - read-only CI release-readiness, release admission/transition/trust/checkpoint/consistency, complete audit/trust/receiver/acceptance verification, and installed-package artifacts with no publication, signing key, OIDC request, or registry credentials
 
 ## 0.1.0 — 2026-07-16
