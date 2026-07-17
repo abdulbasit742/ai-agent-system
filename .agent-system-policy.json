@@ -9,6 +9,15 @@
       "owner": "repository-security",
       "reason": "Executes only the packaged reviewed receiver-bundle source after a fixed fail-closed acceptance token transformation; no external source or runtime input is compiled.",
       "expires": "2027-07-16"
+    },
+    {
+      "id": "reviewed-acceptance-trust-bundle-adapter",
+      "rule_id": "BAS013",
+      "path": "agent_audit_trust_receiver_acceptance_trust_bundle.py",
+      "fingerprint": "18b01891b10e7feb1373b46efd9293b37096c2384c3ad053c63b8a210b299166",
+      "owner": "repository-security",
+      "reason": "Executes only the packaged reviewed receiver-bundle source after a fixed fail-closed acceptance-trust token transformation; no external source or runtime input is compiled.",
+      "expires": "2027-07-17"
     }
   ]
 }

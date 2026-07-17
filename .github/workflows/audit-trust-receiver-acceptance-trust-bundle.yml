@@ -1,0 +1,126 @@
+name: audit-trust-receiver-acceptance-trust-bundle
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-trust-bundle-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test receiver acceptance trust bundles
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_bundle.py" -v
+      - name: Re-run acceptance trust checkpoint and consistency regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_consistency.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance_trust_bundle.py tests/test_audit_trust_receiver_acceptance_trust_bundle.py
+
+  acceptance-trust-bundle-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create snapshot and transition bundles and verify offline
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/.agent-system/audit-trust-receiver-acceptance-trust-bundle"
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tests")
+          from agent_audit_trust_receiver_acceptance_trust import canonical_json
+          from agent_audit_trust_receiver_acceptance_trust_checkpoint import create_checkpoint, create_proof
+          from agent_audit_trust_receiver_acceptance_trust_consistency import create_consistency_proof
+          from test_audit_trust_receiver_acceptance_trust_checkpoint import history
+
+          root = Path(os.environ["ROOT"])
+          states = history()[0]
+          previous = states[0]
+          candidate = states[2]
+          previous_cp = create_checkpoint(previous)
+          candidate_cp = create_checkpoint(candidate)
+          previous_proof = create_proof(previous, previous_cp, sequence=1)
+          candidate_proof = create_proof(candidate, candidate_cp, sequence=3)
+          consistency = create_consistency_proof(previous, previous_cp, candidate, candidate_cp)
+          for name, payload in {
+              "previous-state.json": previous,
+              "candidate-state.json": candidate,
+              "previous-checkpoint.json": previous_cp,
+              "candidate-checkpoint.json": candidate_cp,
+              "previous-proof.json": previous_proof,
+              "candidate-proof.json": candidate_proof,
+              "consistency.json": consistency,
+          }.items():
+              (root / name).write_bytes(canonical_json(payload))
+          (root / "pins.json").write_text(json.dumps({
+              "previous_checkpoint": previous_cp["checkpoint_id"],
+              "candidate_checkpoint": candidate_cp["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          PREVIOUS=$(pin previous_checkpoint)
+          CANDIDATE=$(pin candidate_checkpoint)
+          python agent_audit_trust_receiver_acceptance_trust_bundle.py create "$ROOT/snapshot" \
+            --candidate-checkpoint "$ROOT/previous-checkpoint.json" \
+            --expected-candidate-checkpoint-id "$PREVIOUS" \
+            --proof "$ROOT/previous-proof.json" > "$ROOT/snapshot-create.json"
+          SNAPSHOT=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/snapshot-create.json")
+          python agent_audit_trust_receiver_acceptance_trust_bundle.py create "$ROOT/transition" \
+            --candidate-checkpoint "$ROOT/candidate-checkpoint.json" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --proof "$ROOT/candidate-proof.json" \
+            --previous-checkpoint "$ROOT/previous-checkpoint.json" \
+            --expected-previous-checkpoint-id "$PREVIOUS" \
+            --consistency-proof "$ROOT/consistency.json" > "$ROOT/transition-create.json"
+          TRANSITION=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["bundle_id"])' "$ROOT/transition-create.json")
+          rm "$ROOT"/*-state.json "$ROOT"/*-checkpoint.json "$ROOT"/*-proof.json "$ROOT/consistency.json"
+          python agent_audit_trust_receiver_acceptance_trust_bundle.py verify "$ROOT/snapshot" \
+            --expected-bundle-id "$SNAPSHOT" \
+            --expected-candidate-checkpoint-id "$PREVIOUS" > "$ROOT/snapshot-verify.json"
+          python agent_audit_trust_receiver_acceptance_trust_bundle.py verify "$ROOT/transition" \
+            --expected-bundle-id "$TRANSITION" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS" > "$ROOT/transition-verify.json"
+          printf 'tamper' > "$ROOT/transition/extra.txt"
+          set +e
+          python agent_audit_trust_receiver_acceptance_trust_bundle.py verify "$ROOT/transition" \
+            --expected-bundle-id "$TRANSITION" \
+            --expected-candidate-checkpoint-id "$CANDIDATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS" > "$ROOT/extra.json" 2> "$ROOT/extra-error.json"
+          EXTRA=$?
+          set -e
+          test "$EXTRA" -eq 2
+      - name: Preserve acceptance trust bundle decisions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-trust-bundle-${{ github.sha }}
+          path: |
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/snapshot-create.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/transition-create.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/snapshot-verify.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/transition-verify.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/extra.json
+            .agent-system/audit-trust-receiver-acceptance-trust-bundle/extra-error.json
+          if-no-files-found: warn

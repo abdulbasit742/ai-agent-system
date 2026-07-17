@@ -1,37 +1,39 @@
 {
-  "version": 7,
+  "version": 8,
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 39,
-    "next_expected": 40
+    "latest_completed": 40,
+    "next_expected": 41
   },
   "prior_history": {
     "start": 1,
-    "end": 38,
-    "repository_commit": "40db25307d40829061decd1a672464e7faa65b42",
+    "end": 39,
+    "repository_commit": "919430b399637f0e25784d89ef619e3667293311",
     "path": "development-progress.json"
   },
   "completed": [
     {
-      "number": 39,
-      "title": "Compact receiver-acceptance trust consistency proofs",
+      "number": 40,
+      "title": "Portable receiver-acceptance trust handoff bundles",
       "status": "completed",
-      "summary": "Added compact append-only consistency proofs between pinned receiver-acceptance trust checkpoints with independent root reconstruction, authenticated nested transition boundaries, proof-only verification, immutable evidence, and rollback/fork denials.",
+      "summary": "Added immutable exact-boundary snapshot and transition bundles for pinned receiver-acceptance trust checkpoints, mandatory candidate-head inclusion proofs, optional retained-checkpoint consistency evidence, external freshness pins, and offline verification without complete trust states or loose evidence.",
       "verification": {
-        "unit_tests": 725,
+        "unit_tests": 745,
         "python_versions": ["3.11", "3.12"],
-        "canonical_compact_range_layout": "passed",
-        "previous_and_candidate_root_reconstruction": "passed",
-        "external_state_and_checkpoint_pins": "passed",
-        "proof_only_checkpoint_verification": "passed",
-        "authenticated_acceptance_receiver_trust_boundary": "passed",
-        "nested_delta_tamper_rejection": "passed",
-        "rollback_and_fork_denials": "passed",
-        "immutable_mode_0600_outputs": "passed",
+        "compileall": "passed",
+        "isolated_reviewed_bundle_adapter": "passed",
+        "snapshot_and_transition_composition": "passed",
+        "mandatory_candidate_head_proof": "passed",
+        "external_bundle_and_checkpoint_pins": "passed",
+        "offline_verification_without_loose_evidence": "passed",
+        "exact_file_and_checksum_boundary": "passed",
+        "checkpoint_consistency_and_proof_substitution_rejection": "passed",
+        "symlink_extra_file_and_overwrite_rejection": "passed",
+        "immutable_publication": "passed",
         "installed_aliases": "passed",
-        "dependency_free_modules": 36,
-        "installed_commands": 52,
+        "dependency_free_modules": 37,
+        "installed_commands": 54,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

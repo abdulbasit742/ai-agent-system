@@ -57,6 +57,7 @@ basit-agent-audit-trust-receiver-acceptance-admission = "agent_audit_trust_recei
 basit-agent-audit-trust-receiver-acceptance-trust = "agent_audit_trust_receiver_acceptance_trust:main"
 basit-agent-audit-trust-receiver-acceptance-trust-checkpoint = "agent_audit_trust_receiver_acceptance_trust_checkpoint:main"
 basit-agent-audit-trust-receiver-acceptance-trust-consistency = "agent_audit_trust_receiver_acceptance_trust_consistency:main"
+basit-agent-audit-trust-receiver-acceptance-trust-bundle = "agent_audit_trust_receiver_acceptance_trust_bundle:main"
 agent-system = "agent_cli:main"
 agent-changed-lines = "agent_cli:changed_lines_main"
 agent-audit-segments = "agent_audit_segments:main"
@@ -83,6 +84,7 @@ agent-audit-trust-receiver-acceptance-admission = "agent_audit_trust_receiver_ac
 agent-audit-trust-receiver-acceptance-trust = "agent_audit_trust_receiver_acceptance_trust:main"
 agent-audit-trust-receiver-acceptance-trust-checkpoint = "agent_audit_trust_receiver_acceptance_trust_checkpoint:main"
 agent-audit-trust-receiver-acceptance-trust-consistency = "agent_audit_trust_receiver_acceptance_trust_consistency:main"
+agent-audit-trust-receiver-acceptance-trust-bundle = "agent_audit_trust_receiver_acceptance_trust_bundle:main"
 
 [tool.setuptools]
 include-package-data = false
@@ -114,6 +116,7 @@ py-modules = [
   "agent_audit_trust_receiver_acceptance_trust",
   "agent_audit_trust_receiver_acceptance_trust_checkpoint",
   "agent_audit_trust_receiver_acceptance_trust_consistency",
+  "agent_audit_trust_receiver_acceptance_trust_bundle",
   "agent_baseline",
   "agent_changed_lines",
   "agent_cli",
