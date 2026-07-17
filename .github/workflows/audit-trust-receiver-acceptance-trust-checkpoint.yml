@@ -1,0 +1,105 @@
+name: audit-trust-receiver-acceptance-trust-checkpoint
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-trust-checkpoint-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test acceptance trust checkpoints and proofs
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_checkpoint.py" -v
+      - name: Re-run acceptance trust and bundle regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_bundle.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance_trust_checkpoint.py tests/test_audit_trust_receiver_acceptance_trust_checkpoint.py
+
+  acceptance-trust-checkpoint-integration:
+    runs-on: ubuntu-latest
+    env:
+      ROOT: ${{ runner.temp }}/audit-trust-receiver-acceptance-trust-checkpoint
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create checkpoint and proof, then verify without full state
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT"
+          PYTHONPATH="tests:." ROOT="$ROOT" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from agent_audit_trust_receiver_acceptance_trust import canonical_json
+          from test_audit_trust_receiver_acceptance_trust_checkpoint import history
+
+          root = Path(os.environ["ROOT"])
+          states, _verified = history()
+          (root / "left.json").write_bytes(canonical_json(states[0]))
+          (root / "right.json").write_bytes(canonical_json(states[1]))
+          (root / "pins.json").write_text(json.dumps({
+              "left": states[0]["state_id"],
+              "right": states[1]["state_id"],
+              "bundle": states[1]["head"]["handoff_bundle_id"],
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,os,sys; print(json.load(open(os.environ["ROOT"]+"/pins.json"))[sys.argv[1]])' "$1"; }
+          LEFT=$(pin left)
+          RIGHT=$(pin right)
+          BUNDLE=$(pin bundle)
+          python agent_audit_trust_receiver_acceptance_trust_checkpoint.py create \
+            "$ROOT/right.json" "$ROOT/checkpoint.json" \
+            --expected-state-id "$RIGHT" --format json > "$ROOT/create.json"
+          CHECKPOINT=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/create.json"))["checkpoint_id"])')
+          python agent_audit_trust_receiver_acceptance_trust_checkpoint.py prove \
+            "$ROOT/right.json" "$ROOT/checkpoint.json" "$ROOT/proof.json" \
+            --expected-state-id "$RIGHT" --expected-checkpoint-id "$CHECKPOINT" \
+            --handoff-bundle-id "$BUNDLE" --format json > "$ROOT/prove.json"
+          python agent_audit_trust_receiver_acceptance_trust_checkpoint.py lineage \
+            "$ROOT/left.json" "$ROOT/right.json" \
+            --expected-left-state-id "$LEFT" --expected-right-state-id "$RIGHT" \
+            --format json > "$ROOT/descendant.json"
+          rm "$ROOT/right.json"
+          python agent_audit_trust_receiver_acceptance_trust_checkpoint.py verify-proof \
+            "$ROOT/proof.json" "$ROOT/checkpoint.json" \
+            --expected-checkpoint-id "$CHECKPOINT" --format json > "$ROOT/verify-proof.json"
+          python -c 'import json,os; d=json.load(open(os.environ["ROOT"]+"/verify-proof.json")); assert d["valid"] and d["entry"]["sequence"]==2'
+      - name: Gate rollback, stale pins, and tampering
+        run: |
+          set -euo pipefail
+          LEFT=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/pins.json"))["left"])')
+          cp "$ROOT/proof.json" "$ROOT/proof-before.json"
+          set +e
+          python agent_audit_trust_receiver_acceptance_trust_checkpoint.py verify \
+            "$ROOT/checkpoint.json" --expected-checkpoint-id "$(printf 'f%.0s' {1..64})" \
+            --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          python agent_audit_trust_receiver_acceptance_trust_checkpoint.py lineage \
+            "$ROOT/left.json" "$ROOT/left.json" \
+            --expected-left-state-id "$LEFT" --expected-right-state-id "$(printf 'f%.0s' {1..64})" \
+            --format json > "$ROOT/bad-lineage.json" 2> "$ROOT/bad-lineage-error.json"
+          BAD=$?
+          set -e
+          test "$STALE" -eq 2
+          test "$BAD" -eq 1
+          cmp "$ROOT/proof-before.json" "$ROOT/proof.json"
+      - name: Preserve acceptance trust checkpoint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-trust-checkpoint-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver-acceptance-trust-checkpoint/
+          if-no-files-found: warn

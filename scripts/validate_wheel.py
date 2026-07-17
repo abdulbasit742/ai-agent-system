@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tomllib
 import zipfile
 from email.parser import Parser
 from pathlib import Path
@@ -18,75 +19,19 @@ except ModuleNotFoundError:
 
 EXPECTED_NAME = "basit-agent-system"
 EXPECTED_VERSION = __version__
-EXPECTED_MODULES = {
-    "agent_audit.py", "agent_audit_admission.py", "agent_audit_bundle.py",
-    "agent_audit_catalog.py", "agent_audit_checkpoint.py", "agent_audit_consistency.py",
-    "agent_audit_events.py", "agent_audit_segments.py", "agent_audit_trust.py",
-    "agent_audit_trust_checkpoint.py", "agent_audit_trust_consistency.py",
-    "agent_audit_trust_bundle.py", "agent_audit_trust_bundle_core.py",
-    "agent_audit_trust_admission.py", "agent_audit_trust_receiver.py",
-    "agent_audit_trust_receiver_checkpoint.py", "agent_audit_trust_receiver_consistency.py",
-    "agent_audit_trust_receiver_bundle.py", "agent_audit_trust_receiver_admission.py",
-    "agent_audit_trust_receiver_acceptance.py",
-    "agent_audit_trust_receiver_acceptance_checkpoint.py",
-    "agent_audit_trust_receiver_acceptance_consistency.py",
-    "agent_audit_trust_receiver_acceptance_bundle.py",
-    "agent_audit_trust_receiver_acceptance_admission.py",
-    "agent_audit_trust_receiver_acceptance_trust.py",
-    "agent_baseline.py", "agent_changed_lines.py", "agent_cli.py", "agent_config.py",
-    "agent_git.py", "agent_policy.py", "agent_system.py", "agent_system_legacy.py",
-    "agent_version.py",
-}
-EXPECTED_SCRIPTS = {
-    "agent-audit-admission": "agent_audit_admission:main",
-    "agent-audit-bundle": "agent_audit_bundle:main",
-    "agent-audit-catalog": "agent_audit_catalog:main",
-    "agent-audit-catalog-checkpoint": "agent_audit_checkpoint:main",
-    "agent-audit-catalog-consistency": "agent_audit_consistency:main",
-    "agent-audit-segments": "agent_audit_segments:main",
-    "agent-audit-trust": "agent_audit_trust:main",
-    "agent-audit-trust-checkpoint": "agent_audit_trust_checkpoint:main",
-    "agent-audit-trust-consistency": "agent_audit_trust_consistency:main",
-    "agent-audit-trust-bundle": "agent_audit_trust_bundle:main",
-    "agent-audit-trust-admission": "agent_audit_trust_admission:main",
-    "agent-audit-trust-receiver": "agent_audit_trust_receiver:main",
-    "agent-audit-trust-receiver-checkpoint": "agent_audit_trust_receiver_checkpoint:main",
-    "agent-audit-trust-receiver-consistency": "agent_audit_trust_receiver_consistency:main",
-    "agent-audit-trust-receiver-bundle": "agent_audit_trust_receiver_bundle:main",
-    "agent-audit-trust-receiver-admission": "agent_audit_trust_receiver_admission:main",
-    "agent-audit-trust-receiver-acceptance": "agent_audit_trust_receiver_acceptance:main",
-    "agent-audit-trust-receiver-acceptance-checkpoint": "agent_audit_trust_receiver_acceptance_checkpoint:main",
-    "agent-audit-trust-receiver-acceptance-consistency": "agent_audit_trust_receiver_acceptance_consistency:main",
-    "agent-audit-trust-receiver-acceptance-bundle": "agent_audit_trust_receiver_acceptance_bundle:main",
-    "agent-audit-trust-receiver-acceptance-admission": "agent_audit_trust_receiver_acceptance_admission:main",
-    "agent-audit-trust-receiver-acceptance-trust": "agent_audit_trust_receiver_acceptance_trust:main",
-    "agent-changed-lines": "agent_cli:changed_lines_main",
-    "agent-system": "agent_cli:main",
-    "basit-agent": "agent_cli:main",
-    "basit-agent-audit-admission": "agent_audit_admission:main",
-    "basit-agent-audit-bundle": "agent_audit_bundle:main",
-    "basit-agent-audit-trust": "agent_audit_trust:main",
-    "basit-agent-audit-trust-checkpoint": "agent_audit_trust_checkpoint:main",
-    "basit-agent-audit-trust-consistency": "agent_audit_trust_consistency:main",
-    "basit-agent-audit-trust-bundle": "agent_audit_trust_bundle:main",
-    "basit-agent-audit-trust-admission": "agent_audit_trust_admission:main",
-    "basit-agent-audit-trust-receiver": "agent_audit_trust_receiver:main",
-    "basit-agent-audit-trust-receiver-checkpoint": "agent_audit_trust_receiver_checkpoint:main",
-    "basit-agent-audit-trust-receiver-consistency": "agent_audit_trust_receiver_consistency:main",
-    "basit-agent-audit-trust-receiver-bundle": "agent_audit_trust_receiver_bundle:main",
-    "basit-agent-audit-trust-receiver-admission": "agent_audit_trust_receiver_admission:main",
-    "basit-agent-audit-trust-receiver-acceptance": "agent_audit_trust_receiver_acceptance:main",
-    "basit-agent-audit-trust-receiver-acceptance-checkpoint": "agent_audit_trust_receiver_acceptance_checkpoint:main",
-    "basit-agent-audit-trust-receiver-acceptance-consistency": "agent_audit_trust_receiver_acceptance_consistency:main",
-    "basit-agent-audit-trust-receiver-acceptance-bundle": "agent_audit_trust_receiver_acceptance_bundle:main",
-    "basit-agent-audit-trust-receiver-acceptance-admission": "agent_audit_trust_receiver_acceptance_admission:main",
-    "basit-agent-audit-trust-receiver-acceptance-trust": "agent_audit_trust_receiver_acceptance_trust:main",
-    "basit-agent-catalog": "agent_audit_catalog:main",
-    "basit-agent-catalog-checkpoint": "agent_audit_checkpoint:main",
-    "basit-agent-catalog-consistency": "agent_audit_consistency:main",
-    "basit-agent-lines": "agent_cli:changed_lines_main",
-    "basit-agent-segments": "agent_audit_segments:main",
-}
+
+
+def _reviewed_boundary() -> tuple[set[str], dict[str, str]]:
+    project_root = Path(__file__).resolve().parents[1]
+    payload = tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))
+    modules = {f"{name}.py" for name in payload["tool"]["setuptools"]["py-modules"]}
+    scripts = dict(payload["project"]["scripts"])
+    if not modules or not scripts:
+        raise RuntimeError("reviewed package boundary must not be empty")
+    return modules, scripts
+
+
+EXPECTED_MODULES, EXPECTED_SCRIPTS = _reviewed_boundary()
 FORBIDDEN_FRAGMENTS = {
     ".env", ".agent-system", "audit.jsonl", "baseline.json", "action.yml",
     "development-progress", "integrations.lock",
@@ -169,7 +114,7 @@ def validate_wheel(path: Path) -> dict[str, Any]:
             raise WheelValidationError("console script boundary mismatch")
         for line in archive.read(f"{dist_info}/RECORD").decode().splitlines():
             fields = line.split(",")
-            if len(fields) >= 2 and fields[1].startswith("sha256=") and fields[1] == "sha256=":
+            if len(fields) >= 2 and fields[1] == "sha256=":
                 raise WheelValidationError("wheel RECORD contains an empty digest")
     return {
         "wheel": str(path), "project": EXPECTED_NAME, "version": EXPECTED_VERSION,

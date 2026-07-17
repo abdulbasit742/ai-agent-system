@@ -1,6 +1,6 @@
 # Security audit: Python distribution
 
-Task 6 introduced the installable wheel and console scripts. Tasks 14 through 37 expand the reviewed runtime boundary for strict audit integrity, typed event admission, segment rotation, canonical catalogs, portable catalog checkpoints, compact catalog consistency proofs, portable audit evidence bundles, consumer-owned bundle admission, pinned audit bundle trust states, portable audit trust checkpoints, compact audit trust consistency proofs, portable trust handoff bundles, consumer-owned trust handoff admission, pinned receiver states, portable receiver checkpoints, compact receiver consistency proofs, portable receiver checkpoint bundles, consumer-owned receiver bundle admission, pinned receiver-bundle acceptance states, portable acceptance-state checkpoints, compact acceptance consistency proofs, portable acceptance checkpoint bundles, consumer-owned acceptance-bundle admission, and pinned receiver-acceptance trust states while keeping the package dependency-free.
+Task 6 introduced the installable wheel and console scripts. Tasks 14 through 38 expand the reviewed runtime boundary through audit, trust, receiver, acceptance, consumer-state, checkpoint, consistency, bundle, and admission layers while keeping the package dependency-free.
 
 ## Dependency boundary
 
@@ -18,44 +18,14 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 37
 
 ## Wheel contents
 
-`scripts/validate_wheel.py` enforces an exact thirty-four-module allowlist:
+`scripts/validate_wheel.py` derives the exact reviewed boundary from canonical `pyproject.toml` metadata and enforces thirty-five modules. The newest reviewed modules are:
 
-- `agent_audit.py`
-- `agent_audit_admission.py`
-- `agent_audit_bundle.py`
-- `agent_audit_catalog.py`
-- `agent_audit_checkpoint.py`
-- `agent_audit_consistency.py`
-- `agent_audit_events.py`
-- `agent_audit_segments.py`
-- `agent_audit_trust.py`
-- `agent_audit_trust_admission.py`
-- `agent_audit_trust_checkpoint.py`
-- `agent_audit_trust_consistency.py`
-- `agent_audit_trust_bundle.py`
-- `agent_audit_trust_bundle_core.py`
-- `agent_audit_trust_receiver.py`
-- `agent_audit_trust_receiver_acceptance.py`
-- `agent_audit_trust_receiver_acceptance_admission.py`
-- `agent_audit_trust_receiver_acceptance_bundle.py`
-- `agent_audit_trust_receiver_acceptance_checkpoint.py`
-- `agent_audit_trust_receiver_acceptance_consistency.py`
 - `agent_audit_trust_receiver_acceptance_trust.py`
-- `agent_audit_trust_receiver_admission.py`
-- `agent_audit_trust_receiver_bundle.py`
-- `agent_audit_trust_receiver_checkpoint.py`
-- `agent_audit_trust_receiver_consistency.py`
-- `agent_baseline.py`
-- `agent_changed_lines.py`
-- `agent_cli.py`
-- `agent_config.py`
-- `agent_git.py`
-- `agent_policy.py`
-- `agent_system.py`
-- `agent_system_legacy.py`
-- `agent_version.py`
+- `agent_audit_trust_receiver_acceptance_trust_checkpoint.py`
 
-The audit, trust, receiver, acceptance, checkpoint, consistency, bundle, and admission modules preserve strict canonical schemas, external pinning, immutable artifacts, and consumer-owned authorization. `agent_audit_trust_receiver_acceptance_trust.py` loads the reviewed acceptance/receiver state engines in a private namespace, binds admitted acceptance bundles plus nested receiver/trust heads, and emits independent `ABT001`–`ABT010` state decisions without mutating the original modules. The small `agent_system.py` wrapper combines audit controls while `agent_system_legacy.py` retains the reviewed scanner, baseline, policy, Git-scope, guard, and dispatcher implementation.
+The remaining modules are the previously reviewed audit, catalog, checkpoint, consistency, bundle, admission, trust, receiver, acceptance, scanner, policy, Git-scope, CLI, and version modules.
+
+The checkpoint module loads the reviewed receiver-checkpoint engine in a private namespace, binds the Task 37 acceptance-trust state and acceptance-bundle verifier, and emits independent `ABP001`–`ABP011` evidence without mutating prior checkpoint modules.
 
 The validator rejects:
 
@@ -64,29 +34,26 @@ The validator rejects:
 - runtime dependency declarations;
 - multiple `.dist-info` directories;
 - unsafe archive paths;
-- tests, action metadata, integration locks, environment files, audit-log data, segment archives, catalogs, checkpoints, inclusion/consistency proofs, evidence or trust handoff bundles, receiver or acceptance checkpoint bundles, admission policies, decisions, trust states, receiver states, acceptance states, acceptance-trust states, lock files, baselines, and generated reports;
+- tests, workflow metadata, integration locks, environment files, audit data, generated states, checkpoints, proofs, bundles, policies, decisions, lock files, baselines, and reports;
 - wrong project name, version, Python requirement, or console entry points.
 
 ## Installed command boundary
 
-The exact reviewed command set contains forty-eight aliases. The `basit-agent-*` surface includes `basit-agent-audit-trust-receiver-acceptance-trust`; the corresponding `agent-*` compatibility alias provides the same entry point.
+The exact reviewed command set contains fifty aliases. The newest pair is:
 
-The release-admission default policy uses the same exact module and command allowlists as the wheel validator, preventing package validation and consumer policy from drifting independently.
+- `basit-agent-audit-trust-receiver-acceptance-trust-checkpoint`
+- `agent-audit-trust-receiver-acceptance-trust-checkpoint`
 
-## Integration boundary
+The release-admission policy uses the same exact package metadata boundary, preventing validator and consumer policy drift.
 
-The installed wheel does not contain `integrations.lock.json` or cloned external projects. The `doctor` and `run` commands therefore fail closed with a clear source-checkout requirement. This prevents a package build from silently changing or vendoring reviewed integration pins.
+## Integration and data boundaries
 
-## Audit-data boundary
-
-Audit runtime code is included, but audit JSON Lines files, segment directories, manifests, catalog files, checkpoint files, inclusion/consistency proof files, evidence bundle directories, trust handoff directories, receiver or acceptance checkpoint bundle directories, admission policies, decisions, trust-state files, receiver-state files, acceptance-state files, acceptance-trust-state files, lock sidecars, recovery copies, reports, and CI evidence are not package source. Raw paths, command arrays, and Git refs are normalized to domain-separated references before new audit records are stored.
-
-Trust handoff, receiver bundle, and acceptance bundle manifests contain only bounded checkpoint references, authenticated entry evidence, exact roles, sizes, digests, policy hashes, decision IDs, counts, Merkle roots, compact frontiers, and stable diagnostics. The package does not contain generated evidence, consumer policies, decisions, acceptance histories, acceptance-trust histories, or externally retained freshness pins.
+External integrations remain source-checkout-only. Generated audit logs, archives, catalogs, states, checkpoints, proofs, bundles, policies, decisions, freshness pins, and CI evidence never enter the wheel.
 
 ## Release boundary
 
-Ordinary pull-request and push CI builds and validates the wheel but does not publish it. Publication requires a separate explicit release workflow and independent review. No package registry token is read by the current workflow.
+Pull-request and push CI build and validate the wheel but do not publish it. No registry token, signing key, or OIDC request is used.
 
 ## Installation verification
 
-CI builds a wheel on Python 3.11 and 3.12, validates the exact archive and script boundary, installs it into an isolated virtual environment without dependencies, and executes from outside the source checkout. Dedicated package workflows exercise all forty-eight console aliases. The acceptance-trust package smoke creates a canonical pinned state through the installed module and verifies it through both installed aliases on each supported Python version.
+CI builds and validates wheels on Python 3.11 and 3.12, installs without dependencies outside the source checkout, and exercises all fifty aliases. The newest package smoke creates an acceptance-trust checkpoint and proof, deletes the complete state, and verifies the proof through both installed aliases.

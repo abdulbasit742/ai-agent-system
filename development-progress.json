@@ -1,36 +1,38 @@
 {
-  "version": 5,
+  "version": 6,
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 37,
-    "next_expected": 38
+    "latest_completed": 38,
+    "next_expected": 39
   },
   "prior_history": {
     "start": 1,
-    "end": 36,
-    "repository_commit": "d05691b1637bec7a4dbf5cd5945b2de9aa97b53c",
+    "end": 37,
+    "repository_commit": "09b83815b35d8d51edede3325645033fe50cd7df",
     "path": "development-progress.json"
   },
   "completed": [
     {
-      "number": 37,
-      "title": "Pinned receiver-acceptance trust state",
+      "number": 38,
+      "title": "Portable receiver-acceptance trust Merkle checkpoints",
       "status": "completed",
-      "summary": "Added a consumer-owned canonical trust state that anchors admitted receiver-acceptance snapshot bundles and atomically advances through admitted transitions with exact outer acceptance, nested receiver, and nested trust-head binding, replay protection, external freshness pins, and immutable denial behavior.",
+      "summary": "Added canonical Merkle checkpoints for pinned receiver-acceptance trust states, compact per-acceptance-bundle inclusion proofs, proof-only verification, optional complete bundle binding, immutable evidence, and rollback/fork lineage gates.",
       "verification": {
-        "unit_tests": 685,
+        "unit_tests": 705,
         "python_versions": ["3.11", "3.12"],
-        "snapshot_anchor_and_transition_advance": "passed",
-        "canonical_hash_chained_state": "passed",
-        "outer_acceptance_and_nested_receiver_trust_binding": "passed",
-        "external_state_pin": "passed",
-        "replay_rollback_and_nonadvancing_rejection": "passed",
-        "denied_and_invalid_byte_immutability": "passed",
-        "mode_0600_atomic_locked_updates": "passed",
+        "canonical_checkpoint_and_merkle_root": "passed",
+        "external_state_and_checkpoint_pins": "passed",
+        "single_first_middle_head_and_odd_tree_proofs": "passed",
+        "acceptance_bundle_id_selection": "passed",
+        "proof_only_verification": "passed",
+        "snapshot_and_transition_bundle_binding": "passed",
+        "audit_path_and_checkpoint_substitution_rejection": "passed",
+        "rollback_and_fork_lineage_gates": "passed",
+        "immutable_mode_0600_outputs": "passed",
         "installed_aliases": "passed",
-        "dependency_free_modules": 34,
-        "installed_commands": 48,
+        "dependency_free_modules": 35,
+        "installed_commands": 50,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
