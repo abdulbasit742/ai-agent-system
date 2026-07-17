@@ -1,0 +1,160 @@
+name: audit-trust-receiver-acceptance-trust-receiver
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-trust-receiver-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test acceptance-trust receiver state
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_receiver.py" -v
+      - name: Re-run handoff, admission, and trust-state regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_bundle.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_admission.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance_trust_receiver.py tests/test_audit_trust_receiver_acceptance_trust_receiver.py
+
+  acceptance-trust-receiver-integration:
+    runs-on: ubuntu-latest
+    env:
+      ROOT: ${{ runner.temp }}/audit-trust-receiver-acceptance-trust-receiver
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Generate real acceptance-trust handoffs and policy
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/snapshot" "$ROOT/transition"
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "tests")
+          from agent_audit_trust_receiver_acceptance_trust_admission import (
+              canonical_json,
+              default_policy,
+          )
+          from test_audit_trust_receiver_acceptance_trust_admission import (
+              AcceptanceTrustAdmissionTests,
+          )
+
+          root = Path(os.environ["ROOT"])
+          helper = AcceptanceTrustAdmissionTests()
+          _state1, checkpoint1, bundle1, manifest1 = helper.snapshot(root / "snapshot")
+          previous, _candidate, previous_cp, candidate_cp, bundle2, manifest2 = helper.transition(
+              root / "transition"
+          )
+          assert checkpoint1 == previous_cp
+          (root / "policy.json").write_bytes(canonical_json(default_policy()))
+          denied = default_policy()
+          denied["bundle"]["allowed_types"] = ["snapshot"]
+          (root / "denied-policy.json").write_bytes(canonical_json(denied))
+          (root / "pins.json").write_text(
+              json.dumps(
+                  {
+                      "snapshot_bundle": manifest1["bundle_id"],
+                      "snapshot_checkpoint": checkpoint1["checkpoint_id"],
+                      "transition_bundle": manifest2["bundle_id"],
+                      "transition_checkpoint": candidate_cp["checkpoint_id"],
+                      "previous_checkpoint": previous_cp["checkpoint_id"],
+                      "snapshot_path": str(bundle1),
+                      "transition_path": str(bundle2),
+                  },
+                  sort_keys=True,
+              )
+          )
+          PY
+      - name: Anchor, deny safely, advance, and verify current head
+        run: |
+          set -euo pipefail
+          pin() { python -c 'import json,os,sys; print(json.load(open(os.environ["ROOT"]+"/pins.json"))[sys.argv[1]])' "$1"; }
+          SNAPSHOT_BUNDLE=$(pin snapshot_bundle)
+          SNAPSHOT_CHECKPOINT=$(pin snapshot_checkpoint)
+          SNAPSHOT_PATH=$(pin snapshot_path)
+          TRANSITION_BUNDLE=$(pin transition_bundle)
+          TRANSITION_CHECKPOINT=$(pin transition_checkpoint)
+          TRANSITION_PATH=$(pin transition_path)
+          python agent_audit_trust_receiver_acceptance_trust_receiver.py init \
+            "$ROOT/receiver.json" "$SNAPSHOT_PATH" \
+            --policy "$ROOT/policy.json" \
+            --expected-bundle-id "$SNAPSHOT_BUNDLE" \
+            --expected-candidate-checkpoint-id "$SNAPSHOT_CHECKPOINT" \
+            --format json > "$ROOT/init.json"
+          test "$(stat -c '%a' "$ROOT/receiver.json")" = "600"
+          STATE1=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/init.json"))["state_id"])')
+          cp "$ROOT/receiver.json" "$ROOT/before-denial.json"
+          set +e
+          python agent_audit_trust_receiver_acceptance_trust_receiver.py advance \
+            "$ROOT/receiver.json" "$TRANSITION_PATH" \
+            --policy "$ROOT/denied-policy.json" \
+            --expected-state-id "$STATE1" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
+            --format json > "$ROOT/denied.json" 2> "$ROOT/denied-error.json"
+          DENIED=$?
+          set -e
+          test "$DENIED" -eq 1
+          grep -q 'ABN004' "$ROOT/denied.json"
+          cmp "$ROOT/before-denial.json" "$ROOT/receiver.json"
+          python agent_audit_trust_receiver_acceptance_trust_receiver.py advance \
+            "$ROOT/receiver.json" "$TRANSITION_PATH" \
+            --policy "$ROOT/policy.json" \
+            --expected-state-id "$STATE1" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
+            --format json > "$ROOT/advance.json"
+          STATE2=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/advance.json"))["state_id"])')
+          python agent_audit_trust_receiver_acceptance_trust_receiver.py verify \
+            "$ROOT/receiver.json" --expected-state-id "$STATE2" \
+            --bundle "$TRANSITION_PATH" --format json > "$ROOT/verify.json"
+          python -c 'import json,os; d=json.load(open(os.environ["ROOT"]+"/verify.json")); assert d["valid"] and d["entries"] == 2'
+      - name: Reject stale pin and replay without mutation
+        run: |
+          set -euo pipefail
+          pin() { python -c 'import json,os,sys; print(json.load(open(os.environ["ROOT"]+"/pins.json"))[sys.argv[1]])' "$1"; }
+          TRANSITION_BUNDLE=$(pin transition_bundle)
+          TRANSITION_CHECKPOINT=$(pin transition_checkpoint)
+          TRANSITION_PATH=$(pin transition_path)
+          STATE2=$(python -c 'import json,os; print(json.load(open(os.environ["ROOT"]+"/advance.json"))["state_id"])')
+          cp "$ROOT/receiver.json" "$ROOT/before-replay.json"
+          set +e
+          python agent_audit_trust_receiver_acceptance_trust_receiver.py verify \
+            "$ROOT/receiver.json" --expected-state-id "$(printf 'f%.0s' {1..64})" \
+            --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          python agent_audit_trust_receiver_acceptance_trust_receiver.py advance \
+            "$ROOT/receiver.json" "$TRANSITION_PATH" \
+            --policy "$ROOT/policy.json" --expected-state-id "$STATE2" \
+            --expected-bundle-id "$TRANSITION_BUNDLE" \
+            --expected-candidate-checkpoint-id "$TRANSITION_CHECKPOINT" \
+            --format json > "$ROOT/replay.json" 2> "$ROOT/replay-error.json"
+          REPLAY=$?
+          set -e
+          test "$STALE" -eq 1
+          grep -q 'ABN003' "$ROOT/stale-error.json"
+          test "$REPLAY" -eq 2
+          cmp "$ROOT/before-replay.json" "$ROOT/receiver.json"
+      - name: Preserve acceptance-trust receiver evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-trust-receiver-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-trust-receiver-acceptance-trust-receiver/
+          if-no-files-found: warn
