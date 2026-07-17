@@ -1,30 +1,38 @@
 {
-  "version": 9,
+  "version": 10,
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 41,
-    "next_expected": 42
+    "latest_completed": 42,
+    "next_expected": 43
   },
   "prior_history": {
     "start": 1,
-    "end": 40,
-    "repository_commit": "f7fc6dbd1f738ad845bdc4fc9a2b6d8efd2ed5e2",
+    "end": 41,
+    "repository_commit": "6d1dd935942167b49444f243709a41b1a14be08e",
     "path": "development-progress.json"
   },
   "completed": [
     {
-      "number": 41,
-      "title": "Consumer acceptance-trust handoff policy",
+      "number": 42,
+      "title": "Pinned acceptance-trust receiver state",
       "status": "completed",
-      "summary": "Added canonical consumer rules for verified acceptance-trust handoffs with nested count, identity, selection, and transition controls.",
+      "summary": "Added a consumer-owned hash-chained receiver state for admitted receiver-acceptance trust handoffs with snapshot anchoring, transition advancement, exact four-depth predecessor continuity, external freshness pins, replay protection, and atomic locked updates.",
       "verification": {
-        "unit_tests": 765,
+        "unit_tests": 785,
         "python_versions": ["3.11", "3.12"],
         "compileall": "passed",
+        "snapshot_anchor_and_transition_advance": "passed",
+        "four_depth_predecessor_binding": "passed",
+        "admission_report_and_policy_binding": "passed",
+        "external_receiver_state_pin": "passed",
+        "replay_rollback_and_nonadvancing_rejection": "passed",
+        "denied_and_invalid_byte_immutability": "passed",
+        "mode_0600_atomic_locked_updates": "passed",
+        "current_head_handoff_reverification": "passed",
         "installed_aliases": "passed",
-        "dependency_free_modules": 38,
-        "installed_commands": 56,
+        "dependency_free_modules": 39,
+        "installed_commands": 58,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
