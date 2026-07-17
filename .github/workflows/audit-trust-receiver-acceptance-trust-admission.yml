@@ -1,0 +1,104 @@
+name: audit-trust-receiver-acceptance-trust-admission
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-trust-admission-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test acceptance-trust admission policy
+        run: |
+          set -o pipefail
+          mkdir -p "$GITHUB_WORKSPACE/.agent-system"
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_admission.py" -v 2>&1 | tee "$GITHUB_WORKSPACE/.agent-system/acceptance-trust-admission-${{ matrix.python-version }}.log"
+      - name: Re-run handoff bundle regressions
+        run: python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_bundle.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance_trust_admission.py tests/test_audit_trust_receiver_acceptance_trust_admission.py
+      - name: Preserve test decision log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-trust-admission-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: .agent-system/acceptance-trust-admission-${{ matrix.python-version }}.log
+          if-no-files-found: warn
+
+  acceptance-trust-admission-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Evaluate real snapshot and transition handoffs
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/.agent-system/acceptance-trust-admission"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" PYTHONPATH="tests:." python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from agent_audit_trust_receiver_acceptance_trust_admission import default_policy, evaluate_bundle
+          from test_audit_trust_receiver_acceptance_trust_bundle import AcceptanceTrustBundleTests
+          root = Path(os.environ["ROOT"])
+          helper = AcceptanceTrustBundleTests()
+          snap_root = root / "snapshot"
+          snap_root.mkdir()
+          _state, checkpoint, bundle, manifest = helper.snapshot_bundle(snap_root)
+          snapshot = evaluate_bundle(
+              bundle, default_policy(),
+              expected_bundle_id=manifest["bundle_id"],
+              expected_candidate_checkpoint_id=checkpoint["checkpoint_id"],
+          )
+          trans_root = root / "transition"
+          trans_root.mkdir()
+          _p, _c, previous_cp, candidate_cp, bundle, manifest = helper.transition_bundle(trans_root)
+          transition = evaluate_bundle(
+              bundle, default_policy(),
+              expected_bundle_id=manifest["bundle_id"],
+              expected_candidate_checkpoint_id=candidate_cp["checkpoint_id"],
+              expected_previous_checkpoint_id=previous_cp["checkpoint_id"],
+          )
+          denied_policy = default_policy()
+          denied_policy["transition"]["max_receiver_entry_delta"] = 0
+          try:
+              from agent_audit_trust_receiver_acceptance_trust_admission import validate_policy
+              validate_policy(denied_policy)
+          except Exception:
+              denied_policy = default_policy()
+              denied_policy["candidate"]["allowed_receiver_state_ids"] = ["f" * 64]
+          denied = evaluate_bundle(
+              bundle, denied_policy,
+              expected_bundle_id=manifest["bundle_id"],
+              expected_candidate_checkpoint_id=candidate_cp["checkpoint_id"],
+              expected_previous_checkpoint_id=previous_cp["checkpoint_id"],
+          )
+          assert snapshot["admitted"] and transition["admitted"] and not denied["admitted"]
+          for name, payload in {"snapshot-decision.json": snapshot, "transition-decision.json": transition, "denied-decision.json": denied}.items():
+              (root / name).write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+          PY
+      - name: Preserve admission decisions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-trust-admission-decisions-${{ github.sha }}
+          path: |
+            .agent-system/acceptance-trust-admission/snapshot-decision.json
+            .agent-system/acceptance-trust-admission/transition-decision.json
+            .agent-system/acceptance-trust-admission/denied-decision.json
+          if-no-files-found: warn
