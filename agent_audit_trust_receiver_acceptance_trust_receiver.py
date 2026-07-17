@@ -788,7 +788,41 @@ _engine._verified_handoff = _verified_handoff
 _engine._evaluate = _evaluate
 
 load_state = _engine.load_state
-main = _engine.main
+_original_main = _engine.main
+
+
+def _remap_rule_ids(value: Any) -> Any:
+    if isinstance(value, dict):
+        result = {key: _remap_rule_ids(item) for key, item in value.items()}
+        rule_id = result.get("rule_id")
+        if isinstance(rule_id, str) and len(rule_id) == 6 and rule_id[:3] in {
+            "ATR",
+            "ARS",
+            "ABT",
+        }:
+            result["rule_id"] = RULE_PREFIX + rule_id[3:]
+        return result
+    if isinstance(value, list):
+        return [_remap_rule_ids(item) for item in value]
+    return value
+
+
+def main(argv: list[str] | None = None) -> int:
+    original_emit = _engine._emit
+
+    def remapping_emit(
+        payload: dict[str, Any],
+        output_format: str,
+        *,
+        stream: Any = None,
+    ) -> None:
+        original_emit(_remap_rule_ids(payload), output_format, stream=stream)
+
+    _engine._emit = remapping_emit
+    try:
+        return _original_main(argv)
+    finally:
+        _engine._emit = original_emit
 
 
 def adapter_report() -> dict[str, Any]:
