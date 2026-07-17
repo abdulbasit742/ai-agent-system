@@ -1,6 +1,6 @@
 # Security audit: Python distribution
 
-Task 6 introduced the installable wheel and console scripts. Tasks 14 through 39 expand the reviewed runtime boundary through audit, trust, receiver, acceptance, consumer-state, checkpoint, consistency, bundle, and admission layers while keeping the package dependency-free.
+Task 6 introduced the installable wheel and console scripts. Tasks 14 through 40 expand the reviewed runtime boundary through audit, trust, receiver, acceptance, consumer-state, checkpoint, consistency, bundle, and admission layers while keeping the package dependency-free.
 
 ## Dependency boundary
 
@@ -18,14 +18,13 @@ Task 6 introduced the installable wheel and console scripts. Tasks 14 through 39
 
 ## Wheel contents
 
-`scripts/validate_wheel.py` derives the exact reviewed boundary from canonical `pyproject.toml` metadata and enforces thirty-six modules. The newest reviewed modules are:
+`scripts/validate_wheel.py` derives the exact reviewed boundary from canonical `pyproject.toml` metadata and enforces thirty-seven modules. The newest reviewed module is:
 
-- `agent_audit_trust_receiver_acceptance_trust_checkpoint.py`
-- `agent_audit_trust_receiver_acceptance_trust_consistency.py`
+- `agent_audit_trust_receiver_acceptance_trust_bundle.py`
 
 The remaining modules are the previously reviewed audit, catalog, checkpoint, consistency, bundle, admission, trust, receiver, acceptance, scanner, policy, Git-scope, CLI, and version modules.
 
-The consistency module loads the reviewed acceptance-consistency engine in a private namespace, binds the Task 37 acceptance-trust state and Task 38 checkpoint schemas, and emits independent `ABR001`–`ABR011` evidence without mutating prior consistency modules.
+The new module adapts the reviewed receiver-bundle engine in a private namespace, binds the Task 37 acceptance-trust state, Task 38 checkpoint, and Task 39 consistency schemas, and emits independent `ABB001`–`ABB012` evidence without mutating prior bundle modules.
 
 The validator rejects:
 
@@ -39,16 +38,16 @@ The validator rejects:
 
 ## Installed command boundary
 
-The exact reviewed command set contains fifty-two aliases. The newest pair is:
+The exact reviewed command set contains fifty-four aliases. The newest pair is:
 
-- `basit-agent-audit-trust-receiver-acceptance-trust-consistency`
-- `agent-audit-trust-receiver-acceptance-trust-consistency`
+- `basit-agent-audit-trust-receiver-acceptance-trust-bundle`
+- `agent-audit-trust-receiver-acceptance-trust-bundle`
 
 The release-admission policy uses the same exact package metadata boundary, preventing validator and consumer policy drift.
 
 ## Integration and data boundaries
 
-External integrations remain source-checkout-only. Generated audit logs, archives, catalogs, states, checkpoints, proofs, bundles, policies, decisions, freshness pins, and CI evidence never enter the wheel.
+External integrations remain source-checkout-only. Generated audit logs, archives, catalogs, states, checkpoints, proofs, handoff bundles, policies, decisions, freshness pins, and CI evidence never enter the wheel.
 
 ## Release boundary
 
@@ -56,4 +55,4 @@ Pull-request and push CI build and validate the wheel but do not publish it. No 
 
 ## Installation verification
 
-CI builds and validates wheels on Python 3.11 and 3.12, installs without dependencies outside the source checkout, and exercises all fifty-two aliases. The newest package smoke creates retained and candidate acceptance-trust states and checkpoints, creates a compact proof through one installed alias, deletes both complete states, and verifies the proof through the compatibility alias.
+CI builds and validates wheels on Python 3.11 and 3.12, installs without dependencies outside the source checkout, and exercises all fifty-four aliases. The newest package smoke creates retained and candidate acceptance-trust states, checkpoints, head proofs, and a compact consistency proof; creates snapshot and transition handoff bundles through the installed aliases; deletes every loose evidence file; and verifies both bundles offline.
