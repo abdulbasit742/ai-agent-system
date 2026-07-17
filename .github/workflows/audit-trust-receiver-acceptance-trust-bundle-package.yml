@@ -14,6 +14,8 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -27,7 +29,8 @@ jobs:
           python -m venv "$RUNNER_TEMP/acceptance-trust-bundle-venv"
           BIN="$RUNNER_TEMP/acceptance-trust-bundle-venv/bin"
           "$BIN/python" -m pip install --no-deps dist/*.whl
-          ROOT="$RUNNER_TEMP/installed-acceptance-trust-bundle"
+          ROOT="$GITHUB_WORKSPACE/.agent-system/installed-acceptance-trust-bundle"
+          rm -rf "$ROOT"
           mkdir -p "$ROOT/run"
           cd "$ROOT/run"
           ROOT="$ROOT" "$BIN/python" - <<'PY'
@@ -155,10 +158,14 @@ jobs:
             --expected-candidate-checkpoint-id "$CANDIDATE" \
             --expected-previous-checkpoint-id "$RETAINED" > "$ROOT/transition-verify.json"
           "$BIN/python" -c 'import json,sys; assert json.load(open(sys.argv[1]))["valid"]' "$ROOT/transition-verify.json"
-      - name: Preserve installed acceptance trust bundle evidence
+      - name: Preserve installed acceptance trust bundle decisions
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: audit-trust-receiver-acceptance-trust-bundle-package-${{ matrix.python-version }}-${{ github.sha }}
-          path: ${{ runner.temp }}/installed-acceptance-trust-bundle/
+          path: |
+            .agent-system/installed-acceptance-trust-bundle/snapshot-create.json
+            .agent-system/installed-acceptance-trust-bundle/transition-create.json
+            .agent-system/installed-acceptance-trust-bundle/snapshot-verify.json
+            .agent-system/installed-acceptance-trust-bundle/transition-verify.json
           if-no-files-found: warn
