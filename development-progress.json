@@ -1,39 +1,30 @@
 {
-  "version": 8,
+  "version": 9,
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 40,
-    "next_expected": 41
+    "latest_completed": 41,
+    "next_expected": 42
   },
   "prior_history": {
     "start": 1,
-    "end": 39,
-    "repository_commit": "919430b399637f0e25784d89ef619e3667293311",
+    "end": 40,
+    "repository_commit": "f7fc6dbd1f738ad845bdc4fc9a2b6d8efd2ed5e2",
     "path": "development-progress.json"
   },
   "completed": [
     {
-      "number": 40,
-      "title": "Portable receiver-acceptance trust handoff bundles",
+      "number": 41,
+      "title": "Consumer acceptance-trust handoff policy",
       "status": "completed",
-      "summary": "Added immutable exact-boundary snapshot and transition bundles for pinned receiver-acceptance trust checkpoints, mandatory candidate-head inclusion proofs, optional retained-checkpoint consistency evidence, external freshness pins, and offline verification without complete trust states or loose evidence.",
+      "summary": "Added canonical consumer rules for verified acceptance-trust handoffs with nested count, identity, selection, and transition controls.",
       "verification": {
-        "unit_tests": 745,
+        "unit_tests": 765,
         "python_versions": ["3.11", "3.12"],
         "compileall": "passed",
-        "isolated_reviewed_bundle_adapter": "passed",
-        "snapshot_and_transition_composition": "passed",
-        "mandatory_candidate_head_proof": "passed",
-        "external_bundle_and_checkpoint_pins": "passed",
-        "offline_verification_without_loose_evidence": "passed",
-        "exact_file_and_checksum_boundary": "passed",
-        "checkpoint_consistency_and_proof_substitution_rejection": "passed",
-        "symlink_extra_file_and_overwrite_rejection": "passed",
-        "immutable_publication": "passed",
         "installed_aliases": "passed",
-        "dependency_free_modules": 37,
-        "installed_commands": 54,
+        "dependency_free_modules": 38,
+        "installed_commands": 56,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }
