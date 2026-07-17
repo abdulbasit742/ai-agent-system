@@ -1,38 +1,37 @@
 {
-  "version": 6,
+  "version": 7,
   "sequence": {
     "start": 1,
     "end": 400,
-    "latest_completed": 38,
-    "next_expected": 39
+    "latest_completed": 39,
+    "next_expected": 40
   },
   "prior_history": {
     "start": 1,
-    "end": 37,
-    "repository_commit": "09b83815b35d8d51edede3325645033fe50cd7df",
+    "end": 38,
+    "repository_commit": "40db25307d40829061decd1a672464e7faa65b42",
     "path": "development-progress.json"
   },
   "completed": [
     {
-      "number": 38,
-      "title": "Portable receiver-acceptance trust Merkle checkpoints",
+      "number": 39,
+      "title": "Compact receiver-acceptance trust consistency proofs",
       "status": "completed",
-      "summary": "Added canonical Merkle checkpoints for pinned receiver-acceptance trust states, compact per-acceptance-bundle inclusion proofs, proof-only verification, optional complete bundle binding, immutable evidence, and rollback/fork lineage gates.",
+      "summary": "Added compact append-only consistency proofs between pinned receiver-acceptance trust checkpoints with independent root reconstruction, authenticated nested transition boundaries, proof-only verification, immutable evidence, and rollback/fork denials.",
       "verification": {
-        "unit_tests": 705,
+        "unit_tests": 725,
         "python_versions": ["3.11", "3.12"],
-        "canonical_checkpoint_and_merkle_root": "passed",
+        "canonical_compact_range_layout": "passed",
+        "previous_and_candidate_root_reconstruction": "passed",
         "external_state_and_checkpoint_pins": "passed",
-        "single_first_middle_head_and_odd_tree_proofs": "passed",
-        "acceptance_bundle_id_selection": "passed",
-        "proof_only_verification": "passed",
-        "snapshot_and_transition_bundle_binding": "passed",
-        "audit_path_and_checkpoint_substitution_rejection": "passed",
-        "rollback_and_fork_lineage_gates": "passed",
+        "proof_only_checkpoint_verification": "passed",
+        "authenticated_acceptance_receiver_trust_boundary": "passed",
+        "nested_delta_tamper_rejection": "passed",
+        "rollback_and_fork_denials": "passed",
         "immutable_mode_0600_outputs": "passed",
         "installed_aliases": "passed",
-        "dependency_free_modules": 35,
-        "installed_commands": 50,
+        "dependency_free_modules": 36,
+        "installed_commands": 52,
         "self_scan_active_findings": 0,
         "safe_command_guard": "passed"
       }

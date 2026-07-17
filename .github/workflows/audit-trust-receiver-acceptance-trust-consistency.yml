@@ -1,0 +1,113 @@
+name: audit-trust-receiver-acceptance-trust-consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  acceptance-trust-consistency-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test acceptance-trust consistency proofs
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_consistency.py" -v 2>&1 | tee "$RUNNER_TEMP/acceptance-trust-consistency-${{ matrix.python-version }}.log"
+      - name: Re-run acceptance-trust checkpoint and state regressions
+        run: |
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust_checkpoint.py" -v
+          python -m unittest discover -s tests -p "test_audit_trust_receiver_acceptance_trust.py" -v
+      - name: Compile runtime
+        run: python -m compileall -q agent_audit_trust_receiver_acceptance_trust_consistency.py tests/test_audit_trust_receiver_acceptance_trust_consistency.py
+      - name: Preserve test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-trust-consistency-tests-${{ matrix.python-version }}-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-trust-consistency-${{ matrix.python-version }}.log
+          if-no-files-found: warn
+
+  acceptance-trust-consistency-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Create proof, remove states, and verify pinned checkpoints
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/acceptance-trust-consistency"
+          mkdir -p "$ROOT"
+          ROOT="$ROOT" PYTHONPATH="tests:." python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from agent_audit_trust_receiver_acceptance_trust import canonical_json
+          from agent_audit_trust_receiver_acceptance_trust_checkpoint import create_checkpoint
+          from test_audit_trust_receiver_acceptance_trust_consistency import acceptance_trust_state
+          root = Path(os.environ["ROOT"])
+          previous = acceptance_trust_state(2)
+          candidate = acceptance_trust_state(6)
+          previous_cp = create_checkpoint(previous)
+          candidate_cp = create_checkpoint(candidate)
+          for name, payload in {
+              "previous-state.json": previous,
+              "candidate-state.json": candidate,
+              "previous-checkpoint.json": previous_cp,
+              "candidate-checkpoint.json": candidate_cp,
+          }.items():
+              (root / name).write_bytes(canonical_json(payload))
+          (root / "pins.json").write_text(json.dumps({
+              "previous_state": previous["state_id"],
+              "candidate_state": candidate["state_id"],
+              "previous_checkpoint": previous_cp["checkpoint_id"],
+              "candidate_checkpoint": candidate_cp["checkpoint_id"],
+          }, sort_keys=True))
+          PY
+          pin() { python -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$ROOT/pins.json" "$1"; }
+          PREVIOUS_STATE=$(pin previous_state)
+          CANDIDATE_STATE=$(pin candidate_state)
+          PREVIOUS_CHECKPOINT=$(pin previous_checkpoint)
+          CANDIDATE_CHECKPOINT=$(pin candidate_checkpoint)
+          python agent_audit_trust_receiver_acceptance_trust_consistency.py prove \
+            "$ROOT/previous-state.json" "$ROOT/previous-checkpoint.json" \
+            "$ROOT/candidate-state.json" "$ROOT/candidate-checkpoint.json" \
+            "$ROOT/proof.json" \
+            --expected-previous-state-id "$PREVIOUS_STATE" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT" \
+            --expected-candidate-state-id "$CANDIDATE_STATE" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/prove.json" 2> "$ROOT/prove-error.json"
+          rm "$ROOT/previous-state.json" "$ROOT/candidate-state.json"
+          python agent_audit_trust_receiver_acceptance_trust_consistency.py verify \
+            "$ROOT/proof.json" "$ROOT/previous-checkpoint.json" "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$PREVIOUS_CHECKPOINT" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/verify.json" 2> "$ROOT/verify-error.json"
+          python -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["valid"] and d["relation"]=="right-descendant"' "$ROOT/verify.json"
+          cp "$ROOT/proof.json" "$ROOT/proof-before.json"
+          set +e
+          python agent_audit_trust_receiver_acceptance_trust_consistency.py verify \
+            "$ROOT/proof.json" "$ROOT/previous-checkpoint.json" "$ROOT/candidate-checkpoint.json" \
+            --expected-previous-checkpoint-id "$(printf 'f%.0s' {1..64})" \
+            --expected-candidate-checkpoint-id "$CANDIDATE_CHECKPOINT" \
+            --format json > "$ROOT/stale.json" 2> "$ROOT/stale-error.json"
+          STALE=$?
+          set -e
+          test "$STALE" -eq 1
+          cmp "$ROOT/proof-before.json" "$ROOT/proof.json"
+      - name: Preserve acceptance-trust consistency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trust-receiver-acceptance-trust-consistency-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-trust-consistency/
+          if-no-files-found: warn
